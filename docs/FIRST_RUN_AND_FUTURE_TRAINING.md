@@ -65,7 +65,7 @@ Each temporal training input must be:
 
 The temporal learner does **not** automatically reproject or align these NDWI scenes. Align them in QGIS to one reference grid before training. Do not mix different lakes, study areas, sensors, or processing recipes into one time series unless deliberately harmonized.
 
-Raw Green, NIR, Red, Blue, or SWIR files are not temporal-training inputs. Convert raw spectral files to a single-band NDWI raster using the dashboard's spectral processor first.
+For NDWI-only training, raw Green, NIR, Red, Blue or SWIR files are not direct inputs; convert them to NDWI first. For multispectral temporal training, prepare one aligned 4/5-band stack for every NDWI scene as described in [SETUP_AND_RUN.md](../SETUP_AND_RUN.md). Do not pass a single-date sample band folder as a temporal training dataset.
 
 ### 3.2 Filename convention
 
@@ -141,6 +141,8 @@ Modes:
 - both: full retraining and, if an active model exists, incremental fine-tuning.
 - full: fresh model initialization.
 - incremental: fine-tune the active model; requires an existing active model.
+
+The current NDWI-only model uses six input channels: NDWI at t-2, NDWI at t-1, signed and absolute NDWI change, and two validity masks. Training patches receive eight rotations/reflections; validation patches are never augmented. Relative-class loss weights are derived from training pixels only. A multispectral model uses a separate 18/21-channel schema and must be trained with complete per-date stacks.
 
 The run creates timestamped folders under knowledge_base/runs/ and candidate versions under knowledge_base/models/. The run summary records metrics and promotion status.
 
