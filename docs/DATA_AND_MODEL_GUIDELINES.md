@@ -15,11 +15,14 @@ The temporal U-Net has a shared encoder/decoder and two heads:
 2. relative_class_probabilities: four-class softmax output (0 non-water,
    1 shallow, 2 moderate, 3 deep).
 
-The generated pixel CSV is reconstructed into raster-shaped targets using
-image, row, column, water and depth_class. If the CSV is absent or covers less
-than 95% of a scene's valid pixels, labels are generated from Otsu and the
-per-scene 33.33/66.67 percentile boundaries. Provenance is written to the
-training report.
+The supplied pixel CSV is reconstructed into raster-shaped targets using
+image, row, column, water and depth_class. It is sparse pixel supervision:
+every valid supplied coordinate is retained and unlabelled pixels are masked
+out of the supervised loss. A partially labelled scene is not replaced by
+pseudo-labels. Otsu and per-scene 33.33/66.67 percentile pseudo-labels are used
+only when a scene has no usable CSV labels. Provenance and coverage are written
+to the training report. The current repository CSV contains 87,901 rows across
+11 scenes (7,991 rows per scene).
 
 These are pseudo-labels generated from NDWI processing. A model trained on
 them learns to reproduce that algorithm's classifications. It does not prove
