@@ -182,3 +182,19 @@ as warnings because they interrupt temporal training windows.
 For the current repository data, add the missing
 `NDWI_SEP_DEC_24.tif` scene if it is available. The temporal pipeline skips
 windows that cross that missing period; it does not invent an observation.
+
+
+## Train using GitHub Actions (cloud CPU)
+
+The repository includes a manual **Train NDWI model** workflow. Open the
+GitHub repository, select **Actions → Train NDWI model → Run workflow**, choose
+the training mode and epoch count, and start the run. The workflow installs
+the pinned project requirements, audits the committed rasters and labels,
+trains the temporal U-Net, and uploads the dataset audit plus versioned model
+artifacts and reports as a downloadable workflow artifact.
+
+This workflow does not commit trained weights to Git. Download and back up the
+artifact after the run. Review `training_report.json` and the label provenance
+before interpreting validation metrics. If the audit reports missing seasonal
+periods, the affected temporal windows are skipped; add the missing source
+scene before expecting a continuous seasonal history.
