@@ -4,7 +4,7 @@
 >
 > The dashboard also provides a clearly labelled **experimental preview** so a trained model can be inspected before it passes the quality gate. This does not approve the model, promote it, or replace the validated active model. Treat experimental maps as research previews only.
 
-This guide is for the current Jakkur Lake NDWI workflow. The project uses a TensorFlow/Keras temporal CNN U-Net; see [CNN U-Net Architecture](CNN_UNET_ARCHITECTURE.md) for its encoder-decoder, skip connections, input channels, prediction heads, and multispectral expansion roadmap. Temporal training expects **single-band NDWI GeoTIFF scenes**. Raw multispectral bands belong in the dashboard's separate spectral-to-index converter first.
+This guide is for the current Jakkur Lake NDWI workflow. The project uses a TensorFlow/Keras temporal CNN U-Net; see [CNN U-Net Architecture](CNN_UNET_ARCHITECTURE.md) for its encoder-decoder, skip connections, input channels, prediction heads, and optional multispectral temporal mode. NDWI-only training uses **single-band NDWI GeoTIFF scenes**. Multispectral training additionally requires one aligned 4/5-band stack for every NDWI scene.
 
 ## 1. Understand the folders and protect the knowledge base
 
@@ -148,7 +148,7 @@ The run creates timestamped folders under knowledge_base/runs/ and candidate ver
 
 A successful training workflow means the code completed. It does **not** mean the neural model passed validation.
 
-The trainer compares full-scene mosaicked forecasts with a persistence baseline on the same chronological validation scenes. A candidate must match or beat the baseline on both water-extent and relative-class macro-F1, and satisfy the active-model comparison before it replaces the validated active model.
+The trainer augments training patches using eight rotations/reflections and uses class weights computed from training labels. Validation is not augmented. The trainer compares full-scene mosaicked forecasts with a persistence baseline on the same chronological validation scenes. A candidate must match or beat the baseline on both water-extent and relative-class macro-F1, and satisfy the active-model comparison before it replaces the validated active model.
 
 If no candidate passes:
 - the training run can still succeed;
