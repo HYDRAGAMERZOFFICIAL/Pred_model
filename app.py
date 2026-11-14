@@ -257,7 +257,7 @@ if current_tif and os.path.exists(current_tif):
                 "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
                 language="bash",
             )
-            st.caption("Training uses supplied CSV labels when coverage is sufficient; otherwise it records Otsu/quantile pseudo-label fallbacks.")
+            st.caption("Training uses every supplied CSV-labelled pixel and masks unlabelled pixels from the loss; Otsu/quantile fallback is used only when a scene has no usable CSV labels.")
 
         report_path = os.path.join("knowledge_base", "multitask_training_report.json")
         if os.path.isfile(report_path):
