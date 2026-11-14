@@ -4,8 +4,8 @@ NDWI supports water detection/extent analysis, not bathymetric measurement.
 Physical depth and volume are only reported when measured depth data is supplied.
 """
 
-from pyproj import CRS as PyprojCRS
 from __future__ import annotations
+
 import glob
 import os
 import numpy as np
