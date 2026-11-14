@@ -22,4 +22,6 @@ jobs:
       - name: Compile Python modules
         run: python -m compileall -q app.py src tests
       - name: Run geospatial and temporal unit tests
-        run: python -m unittest tests.test_data_processor tests.test_temporal_learning -v
+        run: |
+          python -m unittest discover -s tests -p 'test_data_processor.py' -v
+          python -m unittest discover -s tests -p 'test_temporal_learning.py' -v
