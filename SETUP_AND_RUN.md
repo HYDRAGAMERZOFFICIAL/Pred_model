@@ -1,5 +1,7 @@
 # Setup and Run Guide
 
+For the complete first-run, safe future-data ingestion, retraining, and prediction workflow, start with [FIRST_RUN_AND_FUTURE_TRAINING.md](docs/FIRST_RUN_AND_FUTURE_TRAINING.md).
+
 This guide covers installing the Lake Water Analysis application on Windows,
 starting the Streamlit dashboard, and preparing data for analysis and
 prediction.

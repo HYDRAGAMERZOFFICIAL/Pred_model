@@ -24,8 +24,7 @@ annual water-area trend projection.
 
 Python 3.10–3.12 is recommended.
 
-For detailed Windows setup, input preparation, training, testing, and
-troubleshooting instructions, see [SETUP_AND_RUN.md](SETUP_AND_RUN.md).
+For the complete first-run and future-data workflow, see [First Run and Future Training Guide](docs/FIRST_RUN_AND_FUTURE_TRAINING.md). For Windows setup and troubleshooting, see [SETUP_AND_RUN.md](SETUP_AND_RUN.md).
 
 ```bash
 python -m pip install -r requirements.txt
