@@ -285,12 +285,17 @@ if current_tif and os.path.exists(current_tif):
             )
             st.caption("Training uses every supplied CSV-labelled pixel and masks unlabelled pixels from the loss; Otsu/quantile fallback is used only when a scene has no usable CSV labels.")
 
-        report_path = os.path.join("knowledge_base", "multitask_training_report.json")
+        report_path = model_report_path if os.path.isfile(model_report_path) else os.path.join("knowledge_base", "multitask_training_report.json")
         if os.path.isfile(report_path):
             with st.expander("Model validation metrics and confusion matrices", expanded=False):
                 with open(report_path, encoding="utf-8") as report_file:
                     training_report = json.load(report_file)
-                st.caption("These scores compare predictions with the generated Otsu/quantile labels in the chronological holdout. They are not independent field-validated accuracy.")
+                st.caption("These scores compare predictions with supplied CSV labels or documented pseudo-labels in the chronological holdout. They are not independent field-validated accuracy.")
+                st.write("Deployment eligible:", bool(training_report.get("deployment_eligible", False)))
+                st.write("Input channels:", training_report.get("input_channels", "legacy"))
+                if training_report.get("persistence_baseline"):
+                    st.write("Persistence baseline:")
+                    st.json(training_report["persistence_baseline"])
                 water_metrics = training_report.get("water_validation_metrics", {})
                 class_metrics = training_report.get("relative_class_validation_metrics", {})
                 if water_metrics:
