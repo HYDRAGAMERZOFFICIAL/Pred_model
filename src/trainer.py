@@ -275,6 +275,8 @@ def _train_candidate(
         "spatial_augmentation": "8 dihedral rotations/reflections" if augment else "disabled",
         "class_pixel_counts_train": data_report.get("class_pixel_counts_train"),
         "class_loss_weights": data_report.get("class_loss_weights"),
+        "water_pixel_counts_train": data_report.get("water_pixel_counts_train"),
+        "water_loss_weights": data_report.get("water_loss_weights"),
         "epochs_requested": epochs,
         "epochs_completed": len(history.history.get("loss", [])),
         "best_validation_loss": evaluated_val_loss,
