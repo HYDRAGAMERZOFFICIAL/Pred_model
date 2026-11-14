@@ -22,7 +22,9 @@ out of the supervised loss. A partially labelled scene is not replaced by
 pseudo-labels. Otsu and per-scene 33.33/66.67 percentile pseudo-labels are used
 only when a scene has no usable CSV labels. Provenance and coverage are written
 to the training report. The current repository CSV contains 87,901 rows across
-11 scenes (7,991 rows per scene).
+11 scenes (7,991 rows per scene), matching the 7,991 valid pixels in each
+raster; remaining cells are NoData. The loader also supports partially labelled
+future scenes by masking unknown pixels.
 
 These are pseudo-labels generated from NDWI processing. A model trained on
 them learns to reproduce that algorithm's classifications. It does not prove
