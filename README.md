@@ -154,3 +154,12 @@ reviewed labels to the pixel CSV, ingest them, and run
 `python -m src.trainer --mode both`. The append-only archive deduplicates
 identical raster bytes and retains versioned model candidates. See
 [SETUP_AND_RUN.md](SETUP_AND_RUN.md) for the complete procedure.
+
+
+## Dataset audit
+
+Run `python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv`
+before training. It checks GeoTIFF metadata and grid consistency, missing
+seasonal periods, label coverage, pseudo-label fallbacks and consecutive
+training windows. Resolve errors and review warnings in
+`dataset_audit_report.json` before launching a long training run.

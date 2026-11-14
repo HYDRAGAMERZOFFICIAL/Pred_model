@@ -163,3 +163,22 @@ labels are incorporated into the next training run. Training creates versioned
 candidates and promotes a candidate only when it passes the configured
 validation-loss comparison. Back up `knowledge_base/` separately because it
 contains the archive, model versions, active model, and reports.
+
+
+## Audit the NDWI dataset before training
+
+Run the dataset audit before starting a training job:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv
+```
+
+The command writes `dataset_audit_report.json` and reports raster dimensions,
+CRS, grid consistency, NoData coverage, missing seasonal periods, CSV label
+coverage, pseudo-label fallback scenes, and usable consecutive temporal
+windows. Resolve reported errors before training. Missing seasons are reported
+as warnings because they interrupt temporal training windows.
+
+For the current repository data, add the missing
+`NDWI_SEP_DEC_24.tif` scene if it is available. The temporal pipeline skips
+windows that cross that missing period; it does not invent an observation.

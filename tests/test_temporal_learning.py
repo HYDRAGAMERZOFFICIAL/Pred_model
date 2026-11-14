@@ -6,7 +6,7 @@ import pandas as pd
 import rasterio
 from rasterio.transform import from_origin
 
-from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data
+from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data, _labels_from_csv
 
 
 class TestTemporalLearning(unittest.TestCase):
@@ -36,6 +36,27 @@ class TestTemporalLearning(unittest.TestCase):
             {"name": "NDWI_SEP_DEC_24.tif"},
         ]
         self.assertEqual(consecutive_target_indices(scenes), [2, 3, 6, 7])
+
+    def test_csv_labels_reject_fractional_coordinates(self):
+        frame = pd.DataFrame({
+            "row": [0.5], "column": [0], "water": [1], "depth_class": [1]
+        })
+        with self.assertRaisesRegex(ValueError, "non-integer"):
+            _labels_from_csv(frame, (2, 2), np.ones((2, 2), dtype=bool))
+
+    def test_csv_labels_reject_duplicate_pixels(self):
+        frame = pd.DataFrame({
+            "row": [0, 0], "column": [1, 1], "water": [1, 1], "depth_class": [1, 1]
+        })
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            _labels_from_csv(frame, (2, 2), np.ones((2, 2), dtype=bool))
+
+    def test_csv_labels_reject_inconsistent_water_class(self):
+        frame = pd.DataFrame({
+            "row": [0], "column": [0], "water": [0], "depth_class": [2]
+        })
+        with self.assertRaisesRegex(ValueError, "disagree"):
+            _labels_from_csv(frame, (2, 2), np.ones((2, 2), dtype=bool))
 
     def test_csv_labels_are_reconstructed_and_used(self):
         with tempfile.TemporaryDirectory() as tmp:

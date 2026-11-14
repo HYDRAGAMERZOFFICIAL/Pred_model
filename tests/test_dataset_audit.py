@@ -1,0 +1,30 @@
+import os
+import tempfile
+import unittest
+
+import numpy as np
+import rasterio
+from rasterio.transform import from_origin
+
+from src.dataset_audit import audit_dataset
+
+
+class TestDatasetAudit(unittest.TestCase):
+    def test_audit_reports_missing_seasonal_period(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ["NDWI_JAN_APR_22.tif", "NDWI_SEP_DEC_22.tif", "NDWI_JAN_APR_23.tif"]:
+                path = os.path.join(tmp, name)
+                with rasterio.open(
+                    path, "w", driver="GTiff", height=4, width=4, count=1,
+                    dtype="float32", crs="EPSG:32643",
+                    transform=from_origin(500000, 1500000, 10, 10), nodata=-9999,
+                ) as dst:
+                    dst.write(np.full((4, 4), 0.2, dtype=np.float32), 1)
+            report = audit_dataset(tmp, "labels.csv")
+            self.assertIn("MAY_AUG_22", report["missing_seasonal_periods"])
+            self.assertEqual(report["scene_count"], 3)
+            self.assertTrue(report["warnings"])
+
+
+if __name__ == "__main__":
+    unittest.main()

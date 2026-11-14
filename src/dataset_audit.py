@@ -1,0 +1,132 @@
+"""Command-line audit for dated NDWI GeoTIFF collections and pixel labels."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+
+import numpy as np
+import rasterio
+
+from src.temporal_learning import (
+    SEASON_ORDER,
+    consecutive_target_indices,
+    discover_ndwi_rasters,
+    load_temporal_scenes,
+    temporal_sort_key,
+)
+
+
+def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
+    csv_path = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
+    raster_paths = discover_ndwi_rasters(data_dir)
+    report = {
+        "data_dir": os.path.abspath(data_dir),
+        "dataset_csv": os.path.abspath(csv_path),
+        "scene_count": len(raster_paths),
+        "scenes": [],
+        "missing_seasonal_periods": [],
+        "consecutive_training_windows": [],
+        "label_sources": [],
+        "errors": [],
+        "warnings": [],
+    }
+    if not raster_paths:
+        report["errors"].append("No dated NDWI GeoTIFFs were discovered.")
+        return report
+
+    reference_grid = None
+    ordinals = []
+    for path in raster_paths:
+        try:
+            with rasterio.open(path) as src:
+                valid = src.read_masks(1) > 0
+                if src.crs is None:
+                    report["errors"].append(f"{os.path.basename(path)} has no CRS.")
+                if src.count != 1:
+                    report["errors"].append(
+                        f"{os.path.basename(path)} has {src.count} bands; expected a single-band NDWI raster."
+                    )
+                grid = (src.height, src.width, src.transform, src.crs)
+                if reference_grid is None:
+                    reference_grid = grid
+                elif grid != reference_grid:
+                    report["errors"].append(
+                        f"{os.path.basename(path)} does not match the first scene's raster grid."
+                    )
+                year, period, _ = temporal_sort_key(path)
+                if year != 9999 and period in SEASON_ORDER.values():
+                    ordinals.append(year * 3 + period - 1)
+                report["scenes"].append({
+                    "filename": os.path.basename(path),
+                    "width": int(src.width),
+                    "height": int(src.height),
+                    "bands": int(src.count),
+                    "crs": str(src.crs) if src.crs else None,
+                    "dtype": src.dtypes[0],
+                    "nodata": src.nodata,
+                    "valid_pixels": int(valid.sum()),
+                    "total_pixels": int(valid.size),
+                    "valid_percent": float(valid.mean() * 100.0),
+                })
+        except Exception as exc:
+            report["errors"].append(f"Cannot read {os.path.basename(path)}: {exc}")
+
+    if ordinals:
+        present = set(ordinals)
+        for ordinal in range(min(present), max(present) + 1):
+            if ordinal not in present:
+                year, season_index = divmod(ordinal, 3)
+                season = next(name for name, index in SEASON_ORDER.items() if index == season_index + 1)
+                report["missing_seasonal_periods"].append(f"{season}_{str(year)[-2:]}")
+
+    if os.path.isfile(csv_path):
+        try:
+            scenes = load_temporal_scenes(raster_paths, csv_path)
+            report["label_sources"] = sorted({scene["label_source"] for scene in scenes})
+            report["csv_coverage_by_scene"] = {
+                scene["name"]: float(scene["csv_coverage"]) for scene in scenes
+            }
+            report["consecutive_training_windows"] = [
+                scenes[index]["name"] for index in consecutive_target_indices(scenes)
+            ]
+            fallback = [
+                scene["name"] for scene in scenes
+                if scene["label_source"] != "generated_pixel_csv"
+            ]
+            if fallback:
+                report["warnings"].append(
+                    "Some scenes use Otsu/quantile pseudo-labels instead of CSV labels: "
+                    + ", ".join(fallback)
+                )
+        except Exception as exc:
+            report["errors"].append(f"Training labels or temporal grids are invalid: {exc}")
+    else:
+        report["warnings"].append("Pixel label CSV was not found; training will use pseudo-labels.")
+
+    if report["missing_seasonal_periods"]:
+        report["warnings"].append(
+            "Missing seasonal scenes interrupt temporal windows: "
+            + ", ".join(report["missing_seasonal_periods"])
+        )
+    if len(raster_paths) < 3:
+        report["warnings"].append("At least three scenes are required for temporal learning.")
+    return report
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Audit NDWI GeoTIFF scenes and pixel-label coverage.")
+    parser.add_argument("--data-dir", default=".")
+    parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
+    parser.add_argument("--output", default="dataset_audit_report.json")
+    args = parser.parse_args()
+    report = audit_dataset(args.data_dir, args.dataset_csv)
+    with open(args.output, "w", encoding="utf-8") as stream:
+        json.dump(report, stream, indent=2)
+    print(json.dumps(report, indent=2))
+    if report["errors"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
