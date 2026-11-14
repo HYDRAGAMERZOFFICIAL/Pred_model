@@ -196,6 +196,9 @@ def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, refl
             valid &= spectral_valid
             normalized[~valid] = 0.0
             label_valid &= valid
+            if not label_valid.any():
+                raise ValueError(f"CSV/derived labels for {stem} do not overlap the valid multispectral pixels.")
+            coverage = float(label_valid.sum()) / max(int(valid.sum()), 1)
         scenes.append({
             "path": path, "name": stem, "image": raw, "normalized": normalized,
             "spectral": spectral, "spectral_valid": spectral_valid, "spectral_scale": spectral_scale,
