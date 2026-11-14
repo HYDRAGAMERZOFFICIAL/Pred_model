@@ -18,7 +18,7 @@ from src.model import (
 from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data, build_temporal_input, _starts
 from src.model_validation import deployment_eligibility
 from src.knowledge_base import (
-    ingest_scenes, archived_raster_paths, build_training_label_csv,
+    ingest_scenes, archived_raster_paths, archived_spectral_dir, build_training_label_csv,
     register_model_version, promote_model_version, active_model_path,
 )
 
@@ -294,14 +294,14 @@ def train_and_save_model(
     data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
     learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
-    augment=True,
+    augment=True, spectral_dir=None, reflectance_scale=10000.0,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
     if ingest:
         incoming = discover_ndwi_rasters(data_dir)
         if incoming:
             csv_path = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
-            ingest_scenes(incoming, csv_path if os.path.isfile(csv_path) else None, output_dir)
+            ingest_scenes(incoming, csv_path if os.path.isfile(csv_path) else None, output_dir, spectral_dir)
 
     raster_paths = archived_raster_paths(output_dir)
     if not raster_paths:
@@ -314,8 +314,23 @@ def train_and_save_model(
         candidate = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
         csv_path = candidate if os.path.isfile(candidate) else None
 
+    manifest_path = os.path.join(output_dir, "archive", "manifest.json")
+    manifest_scenes = []
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, encoding="utf-8") as stream:
+            manifest_scenes = json.load(stream).get("scenes", [])
+    spectral_records = [item for item in manifest_scenes if item.get("spectral_archive_path")]
+    if spectral_records and len(spectral_records) != len(raster_paths):
+        raise RuntimeError(
+            "The knowledge base contains multispectral stacks for only some NDWI scenes. "
+            "Provide aligned stacks for every archived scene or train a separate NDWI-only model/archive."
+        )
+    training_spectral_dir = archived_spectral_dir(output_dir) if spectral_records else None
+    if spectral_dir and not training_spectral_dir:
+        raise RuntimeError("A spectral directory was supplied, but no per-scene multispectral stacks were archived.")
     x_train, y_train, x_val, y_val, scenes, data_report = prepare_temporal_training_data(
-        raster_paths, csv_path, patch_size, stride, validation_sequences, min_valid_fraction,
+        raster_paths, csv_path, patch_size, stride, validation_sequences,
+        min_valid_fraction, training_spectral_dir, reflectance_scale,
     )
     data_report["archive_scene_count"] = len(raster_paths)
     data_report["archive_manifest"] = os.path.join(output_dir, "archive", "manifest.json")
@@ -460,6 +475,10 @@ if __name__ == "__main__":
                         help="Minimum fraction of labelled target pixels required to keep a training patch.")
     parser.add_argument("--no-augmentation", action="store_true",
                         help="Disable the default eight-way rotation/reflection augmentation.")
+    parser.add_argument("--spectral-dir", default=None,
+                        help="Optional folder of co-registered 4/5-band stacks named exactly like each NDWI scene.")
+    parser.add_argument("--reflectance-scale", type=float, default=10000.0,
+                        help="Scale factor for integer-like surface reflectance; values already in 0..1 are auto-retained.")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mode", choices=["both", "full", "incremental"], default="both")
