@@ -52,6 +52,7 @@ jobs:
         env:
           SPECTRAL_DIR: ${{ inputs.spectral_dir }}
         run: |
+          if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
             python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --spectral-dir "$SPECTRAL_DIR" --output dataset_audit_report.json
           else
@@ -62,6 +63,7 @@ jobs:
         env:
           SPECTRAL_DIR: ${{ inputs.spectral_dir }}
         run: |
+          if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
             python -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --archive-dir knowledge_base --spectral-dir "$SPECTRAL_DIR"
           else
@@ -72,6 +74,7 @@ jobs:
         env:
           SPECTRAL_DIR: ${{ inputs.spectral_dir }}
         run: |
+          if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
             python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output-dir knowledge_base --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01 --spectral-dir "$SPECTRAL_DIR" --skip-ingest
           else
