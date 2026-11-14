@@ -218,6 +218,24 @@ def _train_candidate(
     report = dict(data_report)
     report.update({
         "model": "NDWI_MultiTask_Temporal_UNet",
+        "architecture": {
+            "family": "convolutional_neural_network",
+            "type": "U-Net encoder-decoder",
+            "framework": "TensorFlow/Keras",
+            "encoder_filters": [32, 64, 128, 256],
+            "decoder_filters": [128, 64, 32],
+            "convolutions_per_block": 2,
+            "kernel_size": [3, 3],
+            "normalization": "batch normalization",
+            "activation": "ReLU",
+            "downsampling": "2x2 max pooling",
+            "upsampling": "2x2 transposed convolution",
+            "skip_connections": True,
+            "prediction_heads": {
+                "water_probability": "1-channel sigmoid segmentation",
+                "relative_class_probabilities": "4-class softmax segmentation",
+            },
+        },
         "training_mode": mode,
         "water_validation_confusion_matrix": water_cm,
         "water_validation_metrics": water_metrics,
