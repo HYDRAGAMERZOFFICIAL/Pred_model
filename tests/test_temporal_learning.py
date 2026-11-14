@@ -18,6 +18,45 @@ class TestTemporalLearning(unittest.TestCase):
         ) as dst:
             dst.write(data.astype(np.float32), 1)
 
+    def write_spectral_stack(self, path, bands):
+        with rasterio.open(
+            path, "w", driver="GTiff", height=bands.shape[1], width=bands.shape[2],
+            count=bands.shape[0], dtype="float32", crs="EPSG:32643",
+            transform=from_origin(500000, 1500000, 10, 10), nodata=-9999,
+        ) as dst:
+            dst.write(bands.astype(np.float32))
+
+    def test_multispectral_temporal_stack_is_loaded_and_becomes_features(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spectral_dir = os.path.join(tmp, "spectral_data")
+            os.makedirs(spectral_dir)
+            paths, frames = [], []
+            seasons = ["JAN_APR", "MAY_AUG", "SEP_DEC", "JAN_APR"]
+            years = [2022, 2022, 2022, 2023]
+            for index, (season, year) in enumerate(zip(seasons, years)):
+                name = f"NDWI_{season}_{str(year)[-2:]}.tif"
+                path = os.path.join(tmp, name)
+                data = np.full((16, 16), -0.2 + index * 0.05, dtype=np.float32)
+                self.write_scene(path, data)
+                paths.append(path)
+                stack = np.stack([np.full((16, 16), (band + 1) * 1000 + index * 100) for band in range(4)])
+                self.write_spectral_stack(os.path.join(spectral_dir, name), stack)
+                frames.append(pd.DataFrame({
+                    "image": [name] * 256,
+                    "row": np.repeat(np.arange(16), 16),
+                    "column": np.tile(np.arange(16), 16),
+                    "water": np.zeros(256, dtype=int),
+                    "depth_class": np.zeros(256, dtype=int),
+                }))
+            csv_path = os.path.join(tmp, "labels.csv")
+            pd.concat(frames, ignore_index=True).to_csv(csv_path, index=False)
+            scenes = load_temporal_scenes(paths, csv_path, spectral_dir)
+            self.assertEqual(scenes[0]["spectral"].shape, (4, 16, 16))
+            self.assertEqual(scenes[0]["spectral_scale"], 10000.0)
+            features = build_temporal_input(scenes[0], scenes[1])
+            self.assertEqual(features.shape, (16, 16, 18))
+            self.assertEqual(scenes[0]["label_source"], "generated_pixel_csv")
+
     def test_temporal_features_include_signed_and_absolute_change(self):
         first = {
             "normalized": np.full((2, 2), 0.2, dtype=np.float32),
