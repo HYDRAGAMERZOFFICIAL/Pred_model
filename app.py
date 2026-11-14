@@ -28,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌊 Lake Water AI Prediction & Analysis Dashboard")
-st.markdown("Multi-temporal satellite raster processing, Neural Network semantic segmentation, depth mapping, spectral visualization, and volumetric calculation.")
+st.markdown("Satellite water-extent analysis, spectral diagnostics, geospatial measurements and validated model workflows.")
 
 processor = LakeDataProcessor()
 tif_files = processor.tif_files
@@ -61,7 +61,8 @@ def get_base_raster_for_selection(year_str, month_str):
 
 # Sidebar Controls for Map Selection
 st.sidebar.header("🗺️ View Historical / Current Map")
-side_lake = st.sidebar.selectbox("Lake Name", ["Jakkur Lake", "Bellandur Lake", "Varthur Lake", "Ulsoor Lake"], key="side_lake")
+side_lake = st.sidebar.selectbox("Lake / Site", ["Jakkur Lake"], key="side_lake")
+st.sidebar.caption("Only Jakkur Lake is represented by the committed raster archive. Other sites can be enabled when their scenes are added.")
 side_year = st.sidebar.selectbox("Year", ["2022", "2023", "2024", "2025"], key="side_year")
 side_month = st.sidebar.selectbox("Month", months, index=0, key="side_month")
 
@@ -141,7 +142,7 @@ if current_tif and os.path.exists(current_tif):
         st.subheader("Water Surface Area & Volumetric Analytics")
         m1, m2, m3 = st.columns(3)
         m1.metric("Water Surface Area", f"{metrics['area_km2']:.4f} km²", f"{metrics['area_m2']:,.0f} m²")
-        m2.metric("Estimated Water Volume", f"{metrics['volume_m3']:,.0f} m³", f"Avg depth: {metrics['avg_depth_m']:.2f} m")
+        m2.metric("Water Volume", "Not available", help="NDWI is not bathymetry. Supply an aligned measured-depth raster to calculate volume.")
         m3.metric("Spatial Resolution", f"{np.sqrt(pixel_area_m2):.2f} m/pixel", f"CRS: {crs}")
 
         st.markdown("### Comprehensive Summary Table")
@@ -149,122 +150,40 @@ if current_tif and os.path.exists(current_tif):
         summary_df = pd.DataFrame({
             "Parameter": [
                 "Lake Name", "Year", "Month", "Season Category", "Raster Scene", "Otsu Threshold",
-                "Total Water Pixels", "Surface Area (km²)", "Average Depth (m)", "Total Water Volume (m³)"
+                "Total Water Pixels", "Surface Area (km²)", "Depth / Volume"
             ],
             "Value": [
                 side_lake, side_year, side_month, season_desc, filename, f"{thresh:.4f}",
                 f"{water_pixels:,}", f"{metrics['area_km2']:.4f} km²",
-                f"{metrics['avg_depth_m']:.2f} m", f"{metrics['volume_m3']:,.0f} m³"
+                "Requires measured depth raster"
             ]
         })
         st.table(summary_df)
 
     with tab3:
-        st.subheader("🔮 Future / Custom Year-Month Prediction Engine")
-        st.markdown("Input any lake name, prediction year, and month. The neural network generates the predicted map, spectral map, grayscale, 3D relative depth map, histogram, Otsu threshold, area, and water volume.")
-
-        pred_col1, pred_col2, pred_col3 = st.columns(3)
-        with pred_col1:
-            pred_lake = st.selectbox("Prediction Lake Name", ["Jakkur Lake", "Bellandur Lake", "Varthur Lake", "Ulsoor Lake"], key="pred_lake")
-        with pred_col2:
-            pred_year = st.number_input("Prediction Year (Past or Future)", min_value=2000, max_value=2050, value=2026, step=1, key="pred_year")
-        with pred_col3:
-            pred_month = st.selectbox("Prediction Month", months, index=4, key="pred_month")
-
-        if st.button("🚀 Predict Lake Water Extent & Generate All Maps"):
-            st.balloons()
-
-            # Predictor simulation based on seasonal shift & year offset
-            m_code, m_desc = map_month_to_season(pred_month)
-            base_tif = get_base_raster_for_selection(str(pred_year), pred_month)
-            b_arr, b_area, _ = processor.load_tif(base_tif)
-            b_arr = np.nan_to_num(b_arr, nan=0.0)
-
-            # Seasonal and multi-annual trend factor
-            year_delta = int(pred_year) - 2024
-            month_idx = months.index(pred_month)
-            seasonal_factor = np.sin((month_idx - 4) * np.pi / 6) * 0.08
-            trend_factor = 1.0 + (year_delta * 0.015) + seasonal_factor
-
-            # Synthesize predicted raster map
-            pred_arr = np.clip(b_arr * trend_factor, -1.0, 1.0)
-            p_thresh, p_bin, p_water_px, p_total = processor.compute_otsu_threshold(pred_arr)
-            p_depth = processor.compute_depth_map(pred_arr, p_bin)
-            p_metrics = processor.compute_water_metrics(pred_arr, p_bin, b_area)
-
-            st.success(f"Generated Prediction for **{pred_lake}** in **{pred_month} {pred_year}**:")
-
-            # Metric display
-            pm1, pm2, pm3 = st.columns(3)
-            pm1.metric("Predicted Water Surface Area", f"{p_metrics['area_km2']:.4f} km²", f"{p_metrics['area_m2']:,.0f} m²")
-            pm2.metric("Predicted Water Volume", f"{p_metrics['volume_m3']:,.0f} m³", f"Avg Depth: {p_metrics['avg_depth_m']:.2f} m")
-            pm3.metric("Predicted Otsu Threshold", f"{p_thresh:.4f}", f"Water Ratio: {(p_water_px/p_total)*100:.2f}%")
-
-            # All 4 visual maps + Histogram for predicted year/month
-            pcol1, pcol2 = st.columns(2)
-            with pcol1:
-                st.markdown("### 1. Predicted NDWI Image")
-                fig_p1, ax_p1 = plt.subplots(figsize=(6, 4.5))
-                im_p1 = ax_p1.imshow(pred_arr, cmap='viridis')
-                ax_p1.set_title(f"Predicted NDWI: {pred_lake} ({pred_month} {pred_year})")
-                fig_p1.colorbar(im_p1, ax=ax_p1, label="NDWI")
-                st.pyplot(fig_p1)
-
-                st.markdown("### 2. Predicted Grayscale Image")
-                fig_p2, ax_p2 = plt.subplots(figsize=(6, 4.5))
-                p_norm = (pred_arr - pred_arr.min()) / (pred_arr.max() - pred_arr.min() + 1e-8)
-                ax_p2.imshow(p_norm, cmap='gray')
-                ax_p2.set_title("Predicted Grayscale View")
-                st.pyplot(fig_p2)
-
-                st.markdown("### 5. Predicted NDWI Histogram & Otsu Threshold")
-                fig_p5, ax_p5 = plt.subplots(figsize=(6, 4.5))
-                ax_p5.hist(pred_arr.ravel(), bins=50, color='#2ca02c', alpha=0.8, edgecolor='black')
-                ax_p5.axvline(p_thresh, color='red', linestyle='--', linewidth=2.5, label=f"Predicted Otsu: {p_thresh:.4f}")
-                ax_p5.set_title(f"Predicted Pixel Histogram ({pred_month} {pred_year})")
-                ax_p5.set_xlabel("NDWI Value")
-                ax_p5.set_ylabel("Pixel Frequency")
-                ax_p5.legend()
-                st.pyplot(fig_p5)
-
-            with pcol2:
-                st.markdown("### 3. Predicted 3D Relative Depth Map")
-                fig_p3, ax_p3 = plt.subplots(figsize=(6, 4.5))
-                im_p3 = ax_p3.imshow(p_depth, cmap='jet', vmin=0, vmax=3)
-                ax_p3.set_title("Predicted Depth Classes (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
-                fig_p3.colorbar(im_p3, ax=ax_p3, label="Depth Class")
-                st.pyplot(fig_p3)
-
-                st.markdown("### 4. Predicted Spectral Image (Pseudo-Color)")
-                fig_p4, ax_p4 = plt.subplots(figsize=(6, 4.5))
-                im_p4 = ax_p4.imshow(pred_arr, cmap='inferno')
-                ax_p4.set_title("Predicted Spectral Intensity")
-                fig_p4.colorbar(im_p4, ax=ax_p4, label="Intensity")
-                st.pyplot(fig_p4)
-
-                st.markdown("### 🎯 Accuracy & Performance Metrics")
-                st.markdown("""
-                - **Model Prediction Accuracy:** `99.99%`
-                - **Dice Similarity Coefficient:** `0.9945`
-                - **Intersection over Union (IoU):** `0.9890`
-                - **Mean Squared Error (MSE):** `0.0003`
-                """)
-                fig_pcm, ax_pcm = plt.subplots(figsize=(4, 3))
-                cm = np.array([[99.92, 0.08], [0.05, 99.95]])
-                ax_pcm.imshow(cm, cmap='Blues', vmin=0, vmax=100)
-                ax_pcm.set_title("Prediction Confusion Matrix (%)")
-                ax_pcm.set_xticks([0, 1])
-                ax_pcm.set_yticks([0, 1])
-                ax_pcm.set_xticklabels(['Pred Land', 'Pred Water'])
-                ax_pcm.set_yticklabels(['True Land', 'True Water'])
-                for i in range(2):
-                    for j in range(2):
-                        ax_pcm.text(j, i, f"{cm[i, j]:.2f}%", ha='center', va='center', color='black' if cm[i,j]<80 else 'white')
-                st.pyplot(fig_pcm)
+        st.subheader("Forecasting")
+        st.warning(
+            "A validated future forecast is not available yet. The current archive contains "
+            "seasonal scenes for Jakkur Lake, not a sufficiently dense, regularly sampled "
+            "time series. This panel will not fabricate future raster values or accuracy scores."
+        )
+        st.markdown(
+            "Use the historical analysis and spectral converter tabs for measured scene "
+            "processing. A defensible forecast needs dated observations, independent target "
+            "measurements and, where available, rainfall and inflow/outflow covariates."
+        )
+        st.markdown("#### What is needed to enable forecasting")
+        st.write(
+            "Several years of consistently processed observations at a useful time interval, "
+            "with an explicit target such as water area or gauge level. Evaluation must use "
+            "a chronological holdout period."
+        )
 
     with tab4:
         st.subheader("🛰️ Multi-Spectral to Processed NDWI Converter & Engine")
         st.markdown("""
+        Relative NDWI classes are spectral ranks, not physical depth measurements. Volume is not reported without measured bathymetry.
+
         Transform raw satellite spectrum GeoTIFF rasters (**Red, Green, Blue, NIR, SWIR**) into fully processed,
         georeferenced **NDWI GeoTIFF images** matching the project's multi-temporal raster standards.
         Features automatic **spatial alignment, reprojection, Otsu thresholding, 4-tier relative depth classification,
@@ -418,7 +337,7 @@ if current_tif and os.path.exists(current_tif):
                 rm1, rm2, rm3, rm4 = st.columns(4)
                 rm1.metric("Otsu Water Cutoff", f"{res['otsu_threshold']:.4f}")
                 rm2.metric("Water Surface Area", f"{m['area_km2']:.4f} km²", f"{m['area_m2']:,.0f} m²")
-                rm3.metric("Estimated Volume", f"{m['volume_m3']:,.0f} m³", f"Avg Depth: {m['avg_depth_m']:.2f} m")
+                rm3.metric("Water Volume", "Not available", help="Provide measured bathymetry/depth data to calculate physical volume.")
                 rm4.metric("Water Coverage", f"{m['water_coverage_pct']:.2f}%", f"{m['water_pixels']:,} / {m['total_valid_pixels']:,} px")
 
                 # Visual Panels (Row 1: Spectral Bands & Composites)
@@ -472,7 +391,7 @@ if current_tif and os.path.exists(current_tif):
                     st.markdown("#### 4. Binary Water Mask & Relative Depth Classification")
                     fig_d, ax_d = plt.subplots(figsize=(6, 4.5))
                     im_d = ax_d.imshow(res['depth_map'], cmap='jet', vmin=0, vmax=3)
-                    ax_d.set_title("Relative Depth (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
+                    ax_d.set_title("Relative NDWI classes (not bathymetry)")
                     cb_d = fig_d.colorbar(im_d, ax=ax_d, ticks=[0, 1, 2, 3])
                     cb_d.ax.set_yticklabels(['Land', 'Shallow', 'Moderate', 'Deep'])
                     ax_d.axis('off')
