@@ -171,7 +171,7 @@ If no candidate passes:
 
 ### 5.2 Copy new files and update labels
 
-Copy only the new NDWI GeoTIFFs into the project root. Append new pixel-label rows to the same CSV using the exact new GeoTIFF filename and schema above. Preserve all old rows; do not replace the dataset with only the newest batch. When an identical archived raster is re-ingested, new label rows are merged by row/column, keeping the latest row for that pixel.
+Copy only the new NDWI GeoTIFFs into the project root. Append new pixel-label rows to the same CSV using the exact new GeoTIFF filename and schema above. Preserve all old rows; do not replace the dataset with only the newest batch. When an identical archived raster is re-ingested, new label rows are merged by row/column, keeping the latest row for that pixel. When the updated GeoTIFFs and CSV are committed to `main`, the `Train existing NDWI CNN U-Net dataset` GitHub Actions workflow automatically audits the expanded dataset, appends it to the knowledge base, retrains a versioned candidate, and uploads the resulting knowledge base as a workflow artifact. You can also start that workflow manually from GitHub Actions.
 
 ### 5.3 Audit the expanded dataset
 
