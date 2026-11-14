@@ -213,7 +213,7 @@ The repository has a workflow named **Train existing NDWI CNN U-Net dataset**. I
 - trains the full CNN U-Net;
 - uploads the audit, model versions and reports as a downloadable artifact.
 
-Newly added images and CSV changes can trigger the workflow when committed to `main`. The workflow can also be run manually from **GitHub → Actions → Train existing NDWI CNN U-Net dataset → Run workflow**. The optional `spectral_dir` input is only for a complete, aligned multi-date spectral stack directory. The workflow restores the most recent cached `knowledge_base/` before ingestion and saves a new cache after a successful run, preserving archive/model history across cloud runs when GitHub cache retention is available.
+Newly added images and CSV changes can trigger the workflow when committed to `main`. The workflow can also be run manually from **GitHub → Actions → Train existing NDWI CNN U-Net dataset → Run workflow**. The optional `spectral_dir` input is only for a complete, aligned multi-date spectral stack directory. On a push, a folder named `spectral_data/` is auto-detected; if you use a different folder name, enter it when manually dispatching the workflow. The workflow restores the most recent cached `knowledge_base/` before ingestion and saves a new cache after a successful run, preserving archive/model history across cloud runs when GitHub cache retention is available.
 
 Large rasters and CSVs are ignored by default in Git. If you intentionally want GitHub Actions to train from these files, explicitly force-add the required files (adjust the patterns for the files you actually added), for example:
 
