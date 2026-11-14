@@ -45,9 +45,9 @@ def masked_class_accuracy(y_true, y_pred):
     return tf.reduce_sum(correct) / (tf.reduce_sum(valid) + 1e-6)
 
 
-def build_multitask_unet(input_shape=(64, 64, 4), learning_rate=1e-4):
+def build_multitask_unet(input_shape=(64, 64, 6), learning_rate=1e-4):
     """Shared temporal encoder with independent binary and four-class heads."""
-    inputs = layers.Input(shape=input_shape, name="temporal_ndwi_input")
+    inputs = layers.Input(shape=input_shape, name="temporal_raster_input")
 
     def block(x, filters, name):
         x = layers.Conv2D(filters, 3, padding="same", use_bias=False, name=f"{name}_conv1")(x)
