@@ -194,6 +194,7 @@ def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, refl
                 raise FileNotFoundError(f"Missing multispectral stack for {stem} in {spectral_dir}. Supply one aligned 4- or 5-band stack per NDWI scene, or omit --spectral-dir.")
             spectral, spectral_valid, spectral_scale = _load_spectral_stack(spectral_path, grid, reflectance_scale)
             valid &= spectral_valid
+            normalized[~valid] = 0.0
             label_valid &= valid
         scenes.append({
             "path": path, "name": stem, "image": raw, "normalized": normalized,
