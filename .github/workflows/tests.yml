@@ -21,9 +21,12 @@ jobs:
           python -m pip install numpy pandas matplotlib rasterio pyproj scikit-image scipy
       - name: Compile Python modules
         run: python -m compileall -q app.py src tests
+      - name: Audit committed NDWI scenes and pixel labels
+        run: python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
       - name: Run geospatial and temporal unit tests
         run: |
           python -m unittest discover -s tests -p 'test_data_processor.py' -v
           python -m unittest discover -s tests -p 'test_temporal_learning.py' -v
           python -m unittest discover -s tests -p 'test_knowledge_base.py' -v
           python -m unittest discover -s tests -p 'test_predictor.py' -v
+          python -m unittest discover -s tests -p 'test_dataset_audit.py' -v
