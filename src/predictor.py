@@ -6,7 +6,7 @@ import rasterio
 from pyproj import CRS as PyprojCRS
 import tensorflow as tf
 
-from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, _starts
+from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, _starts
 
 
 def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv"):
@@ -20,8 +20,13 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
         metadata = json.load(stream)
     patch_size = int(metadata["patch_size"])
     scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
-    if len(scenes) < 2:
-        raise ValueError("At least two dated NDWI scenes are required for prediction.")
+    if len(scenes) < 3:
+        raise ValueError("At least three dated NDWI scenes are required for prediction.")
+    if len(scenes) - 1 not in consecutive_target_indices(scenes):
+        raise ValueError(
+            "The latest two NDWI inputs are not part of a regular four-month seasonal sequence. "
+            "Add the missing seasonal scene before requesting the next-period forecast."
+        )
     first, second = scenes[-2], scenes[-1]
     model = tf.keras.models.load_model(model_path, compile=False)
     height, width = second["image"].shape
