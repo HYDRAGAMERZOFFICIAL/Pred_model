@@ -16,3 +16,10 @@ knowledge_base/training_report.json
 sample_spectral_data/_uploads/
 sample_spectral_data/_temp_download.tif
 *.log
+
+# Local NDWI knowledgebase data and versioned model artifacts
+knowledge_base/archive/
+knowledge_base/models/
+knowledge_base/runs/
+knowledge_base/*.keras
+knowledge_base/*.json
