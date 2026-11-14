@@ -9,6 +9,7 @@ from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 
 from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, build_temporal_input, _starts
+from src.knowledge_base import archived_raster_paths, archived_spectral_dir, build_training_label_csv
 
 
 def _pixel_area_m2(src, height, width):
@@ -108,7 +109,19 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
             "For an explicitly experimental preview only, call with allow_unvalidated=True."
         )
     patch_size = int(metadata["patch_size"])
-    scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
+    spectral_bands = metadata.get("spectral_bands", [])
+    if spectral_bands:
+        archived_paths = archived_raster_paths(model_dir)
+        archived_labels = build_training_label_csv(model_dir)
+        spectral_dir = archived_spectral_dir(model_dir)
+        if not spectral_dir:
+            raise FileNotFoundError("This model requires archived multispectral stacks, but knowledge_base/archive/spectral is missing.")
+        scenes = load_temporal_scenes(
+            archived_paths, archived_labels, spectral_dir,
+            float(metadata.get("reflectance_scale", 10000.0)),
+        )
+    else:
+        scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
     if len(scenes) < 3:
         raise ValueError("At least three dated NDWI scenes are required for prediction.")
     if len(scenes) - 1 not in consecutive_target_indices(scenes):
