@@ -3,10 +3,11 @@ import json
 import os
 import numpy as np
 import rasterio
-from matplotlib import image as mpimg
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
-import tensorflow as tf
 
 from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, _starts
 
@@ -37,6 +38,27 @@ def _pixel_area_m2(src, height, width):
     return None
 
 
+
+def _save_prediction_previews(water_probability, predicted_water, predicted_classes, valid_mask, output_dir):
+    """Write transparent PNG previews for the three raster prediction products."""
+    os.makedirs(output_dir, exist_ok=True)
+    outputs = {
+        "water_probability_png_path": os.path.join(output_dir, "next_season_water_probability.png"),
+        "water_extent_png_path": os.path.join(output_dir, "next_season_water_extent.png"),
+        "relative_class_png_path": os.path.join(output_dir, "next_season_relative_classes.png"),
+    }
+    products = [
+        (water_probability, "Blues", 0.0, 1.0, outputs["water_probability_png_path"]),
+        (predicted_water.astype(np.uint8), "Blues", 0.0, 1.0, outputs["water_extent_png_path"]),
+        (predicted_classes, "viridis", 0.0, 3.0, outputs["relative_class_png_path"]),
+    ]
+    for array, palette, minimum, maximum, path in products:
+        color_map = plt.get_cmap(palette).copy()
+        color_map.set_bad(alpha=0.0)
+        masked = np.ma.array(array, mask=~valid_mask)
+        plt.imsave(path, masked, cmap=color_map, vmin=minimum, vmax=maximum)
+    return outputs
+
 def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv"):
     model_path = os.path.join(model_dir, "ndwi_multitask_unet.keras")
     metadata_path = os.path.join(model_dir, "multitask_training_report.json")
@@ -56,6 +78,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
             "Add the missing seasonal scene before requesting the next-period forecast."
         )
     first, second = scenes[-2], scenes[-1]
+    import tensorflow as tf
     model = tf.keras.models.load_model(model_path, compile=False)
     height, width = second["image"].shape
     water_sum = np.zeros((height, width), dtype=np.float64)
@@ -103,15 +126,9 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
 
     # Portable PNG previews accompany the georeferenced GeoTIFF deliverables.
     # Invalid raster cells remain transparent in all image products.
-    probability_png_path = os.path.join(output_dir, "next_season_water_probability.png")
-    extent_png_path = os.path.join(output_dir, "next_season_water_extent.png")
-    classes_png_path = os.path.join(output_dir, "next_season_relative_classes.png")
-    probability_image = np.ma.masked_invalid(water_probability)
-    extent_image = np.ma.masked_where(~valid_output, predicted_water.astype(np.uint8))
-    classes_image = np.ma.masked_where(~valid_output, predicted_classes)
-    mpimg.imsave(probability_png_path, probability_image, cmap="Blues", vmin=0.0, vmax=1.0)
-    plt.imsave(extent_png_path, extent_image, cmap="Blues", vmin=0, vmax=1)
-    plt.imsave(classes_png_path, classes_image, cmap="viridis", vmin=0, vmax=3)
+    preview_paths = _save_prediction_previews(
+        water_probability, predicted_water, predicted_classes, valid_output, output_dir
+    )
 
     pixel_area_m2 = None
     with rasterio.open(second["path"]) as src:
@@ -123,9 +140,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
         "predicted_for": "next chronological seasonal period",
         "water_probability_path": probability_path,
         "relative_class_path": class_path,
-        "water_probability_png_path": probability_png_path,
-        "water_extent_png_path": extent_png_path,
-        "relative_class_png_path": classes_png_path,
+        **preview_paths,
         "water_pixels": water_pixels,
         "water_area_m2": area_m2,
         "water_area_km2": area_m2 / 1_000_000 if area_m2 is not None else None,

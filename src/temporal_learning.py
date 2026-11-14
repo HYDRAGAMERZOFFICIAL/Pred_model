@@ -71,15 +71,11 @@ def _labels_from_csv(frame, shape, raster_valid):
         & (classes >= 0) & (classes <= 3)
         & (classes == np.floor(classes))
     )
-    if not good.all():
-        raise ValueError(
-            "Pixel CSV contains missing, non-integer, or out-of-range row/column/water/depth_class values."
-        )
-    rows, cols = rows.astype(np.int64), cols.astype(np.int64)
-    water_values, classes = water_values.astype(np.uint8), classes.astype(np.uint8)
+    rows, cols = rows[good].astype(np.int64), cols[good].astype(np.int64)
+    water_values, classes = water_values[good].astype(np.uint8), classes[good].astype(np.uint8)
     inside = (rows >= 0) & (rows < shape[0]) & (cols >= 0) & (cols < shape[1])
-    if not inside.all():
-        raise ValueError("Pixel CSV contains row/column coordinates outside the raster dimensions.")
+    rows, cols = rows[inside], cols[inside]
+    water_values, classes = water_values[inside], classes[inside]
     if not len(rows):
         return None
     if len(set(zip(rows.tolist(), cols.tolist()))) != len(rows):

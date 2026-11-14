@@ -18,7 +18,7 @@ jobs:
       - name: Install geospatial test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy pandas rasterio pyproj scikit-image scipy
+          python -m pip install numpy pandas matplotlib rasterio pyproj scikit-image scipy
       - name: Compile Python modules
         run: python -m compileall -q app.py src tests
       - name: Run geospatial and temporal unit tests
@@ -26,3 +26,4 @@ jobs:
           python -m unittest discover -s tests -p 'test_data_processor.py' -v
           python -m unittest discover -s tests -p 'test_temporal_learning.py' -v
           python -m unittest discover -s tests -p 'test_knowledge_base.py' -v
+          python -m unittest discover -s tests -p 'test_predictor.py' -v
