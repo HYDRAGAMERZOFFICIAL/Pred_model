@@ -91,9 +91,8 @@ def _labels_from_csv(frame, shape, raster_valid):
     water[rows, cols] = water_values
     class_map[rows, cols] = classes
     coverage = float((seen & raster_valid).sum()) / max(int(raster_valid.sum()), 1)
-    # The supplied dataset is intentionally sparse pixel supervision. Keep every
-    # valid annotated pixel and mask all unlabelled pixels from the loss; never
-    # replace a partially labelled scene with synthetic Otsu/quantile targets.
+    # Keep every supplied CSV label. Any raster pixels absent from the CSV are
+    # masked from the loss; do not silently replace partial labels with pseudo-labels.
     valid = raster_valid & seen
     if not valid.any():
         return None
@@ -160,6 +159,13 @@ def load_temporal_scenes(raster_paths, dataset_csv=None):
     return scenes
 
 
+def build_temporal_input(first, second, legacy=False):
+    """Build aligned temporal features; retain a 4-channel legacy schema."""
+    if legacy:
+        return np.stack([first['normalized'], second['normalized'], first['valid'].astype(np.float32), second['valid'].astype(np.float32)], axis=-1).astype(np.float32)
+    delta = second['normalized'] - first['normalized']
+    return np.stack([first['normalized'], second['normalized'], delta, np.abs(delta), first['valid'].astype(np.float32), second['valid'].astype(np.float32)], axis=-1).astype(np.float32)
+
 def _starts(length, patch_size, stride):
     if length <= patch_size:
         return [0]
@@ -181,11 +187,9 @@ def _extract_sequence_patches(scenes, target_index, patch_size, stride, min_vali
             target_valid = target["label_valid"][sl]
             if target_valid.size == 0 or float(target_valid.mean()) < min_valid_fraction:
                 continue
-            x = np.zeros((patch_size, patch_size, 4), dtype=np.float32)
-            x[:h, :w, 0] = first["normalized"][sl]
-            x[:h, :w, 1] = second["normalized"][sl]
-            x[:h, :w, 2] = first["valid"][sl].astype(np.float32)
-            x[:h, :w, 3] = second["valid"][sl].astype(np.float32)
+            features = build_temporal_input(first, second)
+            x = np.zeros((patch_size, patch_size, features.shape[-1]), dtype=np.float32)
+            x[:h, :w, :] = features[sl]
 
             yw = np.zeros((patch_size, patch_size, 2), dtype=np.float32)
             yc = np.zeros((patch_size, patch_size, 2), dtype=np.float32)
@@ -237,8 +241,26 @@ def prepare_temporal_training_data(
 
     x_train, y_train = collect(train_targets)
     x_val, y_val = collect(val_targets)
+    class_target = y_train["relative_class_probabilities"]
+    class_labels = class_target[..., 0].astype(np.int64)
+    class_valid = class_target[..., 1] > 0.5
+    class_counts = np.bincount(class_labels[class_valid], minlength=4).astype(np.float64)
+    present = class_counts > 0
+    class_weights = np.ones(4, dtype=np.float32)
+    if present.any():
+        raw_weights = np.sqrt(class_counts[present].sum() / (present.sum() * class_counts[present]))
+        class_weights[present] = (raw_weights / raw_weights.mean()).astype(np.float32)
+    for target in (y_train, y_val):
+        labels = target["relative_class_probabilities"][..., 0].astype(np.int64)
+        target["relative_class_probabilities"] = np.concatenate([
+            target["relative_class_probabilities"],
+            class_weights[labels][..., None].astype(np.float32),
+        ], axis=-1)
     metadata = {
-        "input_channels": ["ndwi_t_minus_2", "ndwi_t_minus_1", "valid_t_minus_2", "valid_t_minus_1"],
+        "input_channel_names": ["ndwi_t_minus_2", "ndwi_t_minus_1", "ndwi_change_signed", "ndwi_change_absolute", "valid_t_minus_2", "valid_t_minus_1"],
+        "input_channels": 6,
+        "class_pixel_counts_train": class_counts.astype(int).tolist(),
+        "class_loss_weights": class_weights.astype(float).tolist(),
         "target_scenes_train": [scenes[i]["name"] for i in train_targets],
         "target_scenes_validation": [scenes[i]["name"] for i in val_targets],
         "scene_count": len(scenes),
