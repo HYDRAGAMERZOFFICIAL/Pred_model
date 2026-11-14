@@ -10,7 +10,7 @@ from skimage.filters import threshold_otsu
 import tensorflow as tf
 
 from src.data_processor import LakeDataProcessor
-from src.predictor import predict_next_season
+from src.predictor import predict_next_season, resolve_model_artifacts
 from src.forecasting import forecast_annual_water_area
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 import io
@@ -168,14 +168,20 @@ if current_tif and os.path.exists(current_tif):
         st.caption("Forecasts are derived from the dated NDWI archive. Seasonal maps come from the trained multi-task U-Net; annual area is a separate statistical trend projection.")
 
         st.markdown("### 1. Next seasonal spatial forecast")
-        model_path = os.path.join("knowledge_base", "ndwi_multitask_unet.keras")
-        model_report_path = os.path.join("knowledge_base", "multitask_training_report.json")
+        model_path, model_report_path, model_source = resolve_model_artifacts("knowledge_base")
         model_is_eligible = False
         if os.path.isfile(model_report_path):
             with open(model_report_path, encoding="utf-8") as model_report_file:
                 model_is_eligible = bool(json.load(model_report_file).get("deployment_eligible", False))
-        if os.path.isfile(model_path) and model_is_eligible:
-            if st.button("Generate next-season prediction", type="primary", key="run_seasonal_forecast"):
+        model_available = os.path.isfile(model_path) and os.path.isfile(model_report_path)
+        if model_available:
+            if not model_is_eligible:
+                st.warning("Experimental prediction mode is enabled. The available model has not passed the persistence-baseline validation gate.")
+                st.caption("You can generate and inspect maps, but treat them as research previews—not validated forecasts or decision-grade outputs.")
+            if model_source == "versioned_candidate_preview":
+                st.info("No validated active model is available yet. The latest versioned training candidate is loaded for experimental preview only.")
+            button_label = "Generate next-season prediction" if model_is_eligible else "Generate experimental next-season prediction"
+            if st.button(button_label, type="primary", key="run_seasonal_forecast"):
                 try:
                     with st.spinner("Running temporal U-Net over the latest two NDWI scenes..."):
                         forecast_result = predict_next_season(
@@ -183,6 +189,9 @@ if current_tif and os.path.exists(current_tif):
                             model_dir="knowledge_base",
                             output_dir="outputs",
                             dataset_csv="NDWI_pixel_depth_dataset.csv",
+                            allow_unvalidated=True,
+                            model_path=model_path,
+                            metadata_path=model_report_path,
                         )
                     st.session_state["seasonal_forecast_result"] = forecast_result
                 except Exception as exc:
@@ -190,7 +199,12 @@ if current_tif and os.path.exists(current_tif):
 
             result = st.session_state.get("seasonal_forecast_result")
             if result:
-                st.success("Next-period spatial prediction generated.")
+                if result.get("model_validation_status") == "experimental_unvalidated":
+                    st.warning("Experimental output: this model has not passed the persistence-baseline validation gate.")
+                else:
+                    st.success("Validated next-period spatial prediction generated.")
+                if result.get("model_source") == "versioned_candidate_preview":
+                    st.caption("Model source: latest versioned candidate; it has not been promoted to the validated active model.")
                 st.write("Input scenes:", " → ".join(result["input_scenes"]))
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Predicted water pixels", f'{result["water_pixels"]:,}')
@@ -238,16 +252,12 @@ if current_tif and os.path.exists(current_tif):
             else:
                 st.info("The model is available. Generate a forecast to create georeferenced GeoTIFF outputs.")
         else:
-            if os.path.isfile(model_path):
-                st.warning("A model file exists, but it has not passed the persistence-baseline quality gate.")
-                st.caption("Forecast generation is disabled until a candidate matches or beats the latest-scene persistence baseline on both water extent and relative-class macro-F1.")
-            else:
-                st.warning("The multi-task model has not been trained in this environment yet.")
-                st.code(
-                    "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
-                    language="bash",
-                )
-                st.caption("Training uses the generated pixel CSV where scene coverage is sufficient. Missing scene labels are derived from the documented Otsu/quantile procedure and recorded in the report.")
+            st.warning("No trained model or versioned candidate was found. Run the first training workflow from the guide.")
+            st.code(
+                "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
+                language="bash",
+            )
+            st.caption("Training uses supplied CSV labels when coverage is sufficient; otherwise it records Otsu/quantile pseudo-label fallbacks.")
 
         report_path = os.path.join("knowledge_base", "multitask_training_report.json")
         if os.path.isfile(report_path):

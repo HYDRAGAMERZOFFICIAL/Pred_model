@@ -1,4 +1,5 @@
 """Sliding-window inference and georeferenced export for the temporal U-Net."""
+import glob
 import json
 import os
 import numpy as np
@@ -57,19 +58,54 @@ def _save_prediction_previews(water_probability, predicted_water, predicted_clas
         plt.imsave(path, masked, cmap=color_map, vmin=minimum, vmax=maximum)
     return outputs
 
-def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv"):
-    model_path = os.path.join(model_dir, "ndwi_multitask_unet.keras")
-    metadata_path = os.path.join(model_dir, "multitask_training_report.json")
+
+def resolve_model_artifacts(model_dir="knowledge_base"):
+    """Return the approved active model, or latest versioned candidate for preview."""
+    active_model = os.path.join(model_dir, "ndwi_multitask_unet.keras")
+    active_report = os.path.join(model_dir, "multitask_training_report.json")
+    if os.path.isfile(active_model) and os.path.isfile(active_report):
+        return active_model, active_report, "active_model"
+    summaries = sorted(glob.glob(os.path.join(model_dir, "runs", "*", "run_summary.json")), reverse=True)
+    for summary_path in summaries:
+        try:
+            with open(summary_path, encoding="utf-8") as stream:
+                summary = json.load(stream)
+            selected = summary.get("selected_candidate")
+            candidates = summary.get("candidates", [])
+            candidate = next((item for item in candidates if item.get("mode") == selected), None)
+            if candidate is None and candidates:
+                candidate = min(candidates, key=lambda item: item.get("validation_loss", float("inf")))
+            if not candidate:
+                continue
+            model_path, report_path = candidate.get("model_path"), candidate.get("report_path")
+            if not model_path or not report_path:
+                continue
+            if not os.path.isabs(model_path):
+                model_path = os.path.join(os.path.dirname(os.path.abspath(model_dir)), model_path)
+            if not os.path.isabs(report_path):
+                report_path = os.path.join(os.path.dirname(os.path.abspath(model_dir)), report_path)
+            if os.path.isfile(model_path) and os.path.isfile(report_path):
+                return model_path, report_path, "versioned_candidate_preview"
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return active_model, active_report, "missing"
+
+
+def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv", allow_unvalidated=False, model_path=None, metadata_path=None):
+    resolved_model, resolved_report, model_source = resolve_model_artifacts(model_dir)
+    model_path = model_path or resolved_model
+    metadata_path = metadata_path or resolved_report
     if not os.path.isfile(model_path):
         raise FileNotFoundError(f"Trained multi-task model not found: {model_path}. Train it with python -m src.trainer first.")
     if not os.path.isfile(metadata_path):
         raise FileNotFoundError(f"Training metadata not found: {metadata_path}.")
     with open(metadata_path, encoding="utf-8") as stream:
         metadata = json.load(stream)
-    if not metadata.get("deployment_eligible", False):
+    deployment_eligible = bool(metadata.get("deployment_eligible", False))
+    if not deployment_eligible and not allow_unvalidated:
         raise RuntimeError(
-            "The active model has not passed the persistence-baseline validation gate. "
-            "Train a new candidate and review its validation report before using it for forecasts."
+            "The model has not passed the persistence-baseline validation gate. "
+            "For an explicitly experimental preview only, call with allow_unvalidated=True."
         )
     patch_size = int(metadata["patch_size"])
     scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
@@ -141,6 +177,8 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
     return {
         "input_scenes": [first["name"], second["name"]],
         "predicted_for": "next chronological seasonal period",
+        "model_validation_status": "validated" if deployment_eligible else "experimental_unvalidated",
+        "model_source": model_source,
         "water_probability_path": probability_path,
         "relative_class_path": class_path,
         **preview_paths,
