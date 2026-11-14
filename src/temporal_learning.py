@@ -101,7 +101,42 @@ def _labels_from_csv(frame, shape, raster_valid):
     return water, class_map, valid, coverage
 
 
-def load_temporal_scenes(raster_paths, dataset_csv=None):
+def _spectral_stack_path(spectral_dir, scene_name):
+    if not spectral_dir:
+        return None
+    for suffix in (".tif", ".tiff"):
+        candidate = os.path.join(spectral_dir, os.path.splitext(scene_name)[0] + suffix)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _load_spectral_stack(path, reference_grid, reflectance_scale=10000.0):
+    """Read a co-registered 4- or 5-band surface-reflectance stack."""
+    with rasterio.open(path) as src:
+        if src.count not in (4, 5):
+            raise ValueError(f"{path} must contain 4 (Blue, Green, Red, NIR) or 5 (plus SWIR1) bands.")
+        grid = (src.height, src.width, src.transform, src.crs)
+        if grid != reference_grid:
+            raise ValueError(f"Multispectral stack {path} is not aligned to its NDWI scene. Resample all bands to the exact NDWI grid before training.")
+        raw = src.read().astype(np.float32)
+        masks = src.read_masks().astype(bool)
+        valid = masks.all(axis=0) & np.isfinite(raw).all(axis=0)
+        if src.nodata is not None:
+            valid &= np.all(raw != src.nodata, axis=0)
+    valid_values = raw[:, valid]
+    if valid_values.size == 0:
+        raise ValueError(f"No valid multispectral pixels in {path}.")
+    p99 = float(np.percentile(np.abs(valid_values), 99))
+    scale = float(reflectance_scale) if p99 > 2.0 else 1.0
+    if scale <= 0:
+        raise ValueError("reflectance_scale must be positive.")
+    normalized = np.clip(raw / scale, 0.0, 1.0)
+    normalized[:, ~valid] = 0.0
+    return normalized.astype(np.float32), valid, scale
+
+
+def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, reflectance_scale=10000.0):
     """Load aligned scenes and reconstruct their pixel labels from the CSV."""
     if len(raster_paths) < 3:
         raise ValueError("At least three dated NDWI scenes are needed to build temporal input/target sequences.")
@@ -150,8 +185,19 @@ def load_temporal_scenes(raster_paths, dataset_csv=None):
         # the scale comparable across acquisition dates (unlike per-scene min/max).
         normalized = np.clip((np.nan_to_num(raw, nan=0.0) + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
         normalized[~valid] = 0.0
+        spectral = None
+        spectral_valid = valid.copy()
+        spectral_scale = None
+        if spectral_dir:
+            spectral_path = _spectral_stack_path(spectral_dir, stem)
+            if spectral_path is None:
+                raise FileNotFoundError(f"Missing multispectral stack for {stem} in {spectral_dir}. Supply one aligned 4- or 5-band stack per NDWI scene, or omit --spectral-dir.")
+            spectral, spectral_valid, spectral_scale = _load_spectral_stack(spectral_path, grid, reflectance_scale)
+            valid &= spectral_valid
+            label_valid &= valid
         scenes.append({
             "path": path, "name": stem, "image": raw, "normalized": normalized,
+            "spectral": spectral, "spectral_valid": spectral_valid, "spectral_scale": spectral_scale,
             "valid": valid, "label_valid": label_valid, "water": water,
             "classes": class_map, "threshold": threshold, "label_source": label_source,
             "csv_coverage": coverage, "profile": profile, "transform": transform, "crs": crs,
@@ -164,7 +210,23 @@ def build_temporal_input(first, second, legacy=False):
     if legacy:
         return np.stack([first['normalized'], second['normalized'], first['valid'].astype(np.float32), second['valid'].astype(np.float32)], axis=-1).astype(np.float32)
     delta = second['normalized'] - first['normalized']
-    return np.stack([first['normalized'], second['normalized'], delta, np.abs(delta), first['valid'].astype(np.float32), second['valid'].astype(np.float32)], axis=-1).astype(np.float32)
+    if first.get("spectral") is None and second.get("spectral") is None:
+        return np.stack([first['normalized'], second['normalized'], delta, np.abs(delta), first['valid'].astype(np.float32), second['valid'].astype(np.float32)], axis=-1).astype(np.float32)
+    if first.get("spectral") is None or second.get("spectral") is None:
+        raise ValueError("Both historical dates must have multispectral stacks; mixed NDWI-only and multispectral inputs are not supported.")
+    if first["spectral"].shape[0] != second["spectral"].shape[0]:
+        raise ValueError("Multispectral band count changed between temporal input scenes.")
+    band_delta = second["spectral"] - first["spectral"]
+    band_names = ["blue", "green", "red", "nir", "swir1"][:first["spectral"].shape[0]]
+    parts = [
+        first["normalized"][..., None], np.moveaxis(first["spectral"], 0, -1),
+        second["normalized"][..., None], np.moveaxis(second["spectral"], 0, -1),
+        delta[..., None], np.abs(delta)[..., None],
+        np.moveaxis(band_delta, 0, -1),
+        first["valid"][..., None].astype(np.float32),
+        second["valid"][..., None].astype(np.float32),
+    ]
+    return np.concatenate(parts, axis=-1).astype(np.float32)
 
 def _starts(length, patch_size, stride):
     if length <= patch_size:
@@ -205,10 +267,11 @@ def _extract_sequence_patches(scenes, target_index, patch_size, stride, min_vali
 
 def prepare_temporal_training_data(
     raster_paths, dataset_csv=None, patch_size=64, stride=32,
-    validation_sequences=2, min_valid_fraction=0.01,
+    validation_sequences=2, min_valid_fraction=0.01, spectral_dir=None,
+    reflectance_scale=10000.0,
 ):
     """Chronologically split target scenes before patch extraction."""
-    scenes = load_temporal_scenes(raster_paths, dataset_csv)
+    scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale)
     target_indices = consecutive_target_indices(scenes)
     if len(target_indices) < validation_sequences + 1:
         raise ValueError(
@@ -257,8 +320,18 @@ def prepare_temporal_training_data(
             class_weights[labels][..., None].astype(np.float32),
         ], axis=-1)
     metadata = {
-        "input_channel_names": ["ndwi_t_minus_2", "ndwi_t_minus_1", "ndwi_change_signed", "ndwi_change_absolute", "valid_t_minus_2", "valid_t_minus_1"],
-        "input_channels": 6,
+        "input_channel_names": (
+            ["ndwi_t_minus_2", "ndwi_t_minus_1", "ndwi_change_signed", "ndwi_change_absolute", "valid_t_minus_2", "valid_t_minus_1"]
+            if scenes[0].get("spectral") is None else
+            ["ndwi_t_minus_2"] + [f"{band}_t_minus_2" for band in ["blue", "green", "red", "nir", "swir1"][:scenes[0]["spectral"].shape[0]]]
+            + ["ndwi_t_minus_1"] + [f"{band}_t_minus_1" for band in ["blue", "green", "red", "nir", "swir1"][:scenes[0]["spectral"].shape[0]]]
+            + ["ndwi_change_signed", "ndwi_change_absolute"]
+            + [f"{band}_change" for band in ["blue", "green", "red", "nir", "swir1"][:scenes[0]["spectral"].shape[0]]]
+            + ["valid_t_minus_2", "valid_t_minus_1"]
+        ),
+        "input_channels": int(x_train.shape[-1]),
+        "spectral_bands": (["blue", "green", "red", "nir", "swir1"][:scenes[0]["spectral"].shape[0]] if scenes[0].get("spectral") is not None else []),
+        "reflectance_scale": float(reflectance_scale),
         "class_pixel_counts_train": class_counts.astype(int).tolist(),
         "class_loss_weights": class_weights.astype(float).tolist(),
         "target_scenes_train": [scenes[i]["name"] for i in train_targets],
