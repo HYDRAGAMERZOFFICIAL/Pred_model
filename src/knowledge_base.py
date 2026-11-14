@@ -111,7 +111,25 @@ def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base"):
             raise FileNotFoundError(source)
         digest = _sha256(source)
         if digest in by_hash:
-            duplicates.append({"source": source, "archive_path": by_hash[digest]["archive_path"], "reason": "identical_sha256"})
+            existing = by_hash[digest]
+            group = _labels_for_scene(labels, existing.get("source_name", Path(source).name), source)
+            if group is not None:
+                existing_label_file = existing.get("label_file")
+                if existing_label_file and os.path.isfile(existing_label_file):
+                    prior = pd.read_csv(existing_label_file)
+                    combined = pd.concat([prior, group], ignore_index=True, sort=False)
+                    if {"row", "column"}.issubset(combined.columns):
+                        combined = combined.drop_duplicates(subset=["row", "column"], keep="last")
+                    combined.to_csv(existing_label_file, index=False)
+                    existing["label_rows"] = int(len(combined))
+                else:
+                    label_path = labels_dir / f"{digest}.csv"
+                    group.to_csv(label_path, index=False)
+                    existing["label_file"] = str(label_path.as_posix())
+                    existing["label_rows"] = int(len(group))
+                existing["labels_updated_at"] = _now()
+                label_rows += int(len(group))
+            duplicates.append({"source": source, "archive_path": existing["archive_path"], "reason": "identical_sha256"})
             continue
 
         original_name = Path(source).name

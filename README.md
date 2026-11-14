@@ -70,9 +70,65 @@ years are available. Incomplete years are retained with their actual scene
 count. The projection is a short-record statistical baseline, not a physical
 hydrological forecast.
 
-## Scale-up
+## Persistent knowledgebase: append-only archive + versioned models
 
-For hundreds of thousands of scenes, use tiled Cloud-Optimized GeoTIFF or Zarr,
-a metadata manifest, chunked reads, deterministic scene-level splits,
-resumable training, checkpointing and experiment tracking. Do not flatten all
-pixels into one in-memory Python list or a single enormous CSV.
+The local `knowledge_base/` directory is now the persistent source of truth.
+It is intentionally separate from GitHub source control and is not committed.
+
+### 1. Add new scenes without replacing old ones
+
+Place dated NDWI GeoTIFFs in the project root and update the generated pixel
+CSV, or pass explicit GeoTIFF paths. Ingestion copies each scene into
+`knowledge_base/archive/scenes/`, stores its SHA-256, geospatial metadata and
+ingestion timestamp in `archive/manifest.json`, and preserves per-scene pixel
+labels under `archive/labels/`. Re-ingesting identical raster bytes is
+idempotent; it does not create another scene. New label rows for an already
+archived raster are merged by pixel coordinate, with the latest row retained.
+
+```bash
+python -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv
+# Or specify files explicitly:
+python -m src.knowledge_base --images path/to/NDWI_JAN_APR_26.tif --dataset-csv NDWI_pixel_depth_dataset.csv
+```
+
+The archived label index is rebuilt as
+`knowledge_base/archive/training_pixel_labels.csv`. Original generated CSV
+columns are retained. The `image` field is mapped to the content-addressed
+archived GeoTIFF filename. The original source CSV is not modified.
+
+### 2. Train both ways
+
+Default mode runs a fresh full retraining candidate and, when an active model
+exists, an incremental fine-tuning candidate initialized from that model. Both
+candidates train against the full archived scene history and the same
+chronological scene-level validation split.
+
+```bash
+python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50
+```
+
+Other options:
+
+- `--mode full`: train a new model from random initialization using all archived scenes.
+- `--mode incremental`: fine-tune the active model using the expanded full archive. Requires an active model.
+- `--skip-ingest`: train from the archive without scanning the project root for new scenes.
+
+### 3. Model versioning and promotion
+
+Every candidate is retained in `knowledge_base/models/<run-id>/` with its model
+weights and training report. Run logs are stored under `knowledge_base/runs/`.
+The active compatibility files
+(`ndwi_multitask_unet.keras` and `multitask_training_report.json`) are updated
+only when the best new candidate has a finite validation loss no worse than the
+previous active model's recorded validation loss. A failed or worse run leaves
+the current active model untouched.
+
+Validation metrics still measure agreement with the generated CSV or
+Otsu/quantile labels. They are not independent field-validated accuracy.
+The archive and model versions are local files; back them up to durable storage.
+Do not put large rasters, CSVs, or model weights in Git.
+
+For hundreds of thousands of scenes, the next scale step is chunked COG/Zarr
+storage and streaming patch generation. This initial archive implementation
+stores immutable GeoTIFF copies and per-scene CSV labels; it does not yet
+implement distributed storage or out-of-core model training.

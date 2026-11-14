@@ -179,7 +179,7 @@ def train_and_save_model(
     data_report["archive_scene_count"] = len(raster_paths)
     data_report["archive_manifest"] = os.path.join(output_dir, "archive", "manifest.json")
     data_report["training_data_policy"] = "append-only archive; each candidate sees the full archived scene history"
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     run_root = os.path.join(output_dir, "runs", run_id)
     os.makedirs(run_root, exist_ok=True)
 
