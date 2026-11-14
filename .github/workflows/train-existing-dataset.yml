@@ -14,6 +14,7 @@ on:
       - "NDWI_*.tif"
       - "NDWI_pixel_depth_dataset.csv"
       - "spectral_data/**"
+      - "training/TRIGGER_CNN_UNET_TRAINING.txt"
 
 permissions:
   contents: read
