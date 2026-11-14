@@ -399,6 +399,7 @@ def train_and_save_model(
     # Comparing with a historical report would be invalid because the holdout can
     # change whenever new chronological scenes are ingested.
     active_baseline_loss = None
+    active_schema_compatible = None
     if previous_model and os.path.isfile(previous_model):
         try:
             active_model = tf.keras.models.load_model(
@@ -412,8 +413,10 @@ def train_and_save_model(
                 compile=False,
             )
             if int(active_model.input_shape[-1]) != int(x_val.shape[-1]):
-                print("INFO: Active model uses a different input schema; skipping cross-schema loss comparison.")
+                active_schema_compatible = False
+                print("INFO: Active model uses a different input schema; candidate promotion will rely on the current persistence gate because cross-schema loss comparison is invalid.")
             else:
+                active_schema_compatible = True
                 active_model = _compile_loaded_model(active_model, learning_rate)
                 baseline_metrics = active_model.evaluate(
                     x_val, y_val, batch_size=batch_size, verbose=0, return_dict=True
@@ -426,8 +429,10 @@ def train_and_save_model(
         promotion_candidate is not None
         and (
             not (previous_model and os.path.isfile(previous_model))
+            or active_schema_compatible is False
             or (
-                active_baseline_loss is not None
+                active_schema_compatible is True
+                and active_baseline_loss is not None
                 and promotion_candidate["validation_loss"] <= active_baseline_loss
             )
         )
@@ -450,6 +455,7 @@ def train_and_save_model(
             "Candidate did not beat the current active model on the same validation holdout."
         ),
         "previous_active_validation_loss_on_current_holdout": active_baseline_loss,
+        "previous_active_schema_compatible": active_schema_compatible,
         "promoted_to_active": promoted,
         "active_model": active_model_path(output_dir),
         "archive_manifest": os.path.join(output_dir, "archive", "manifest.json"),
