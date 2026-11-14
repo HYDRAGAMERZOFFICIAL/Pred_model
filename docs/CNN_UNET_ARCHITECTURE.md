@@ -14,7 +14,7 @@ The model uses a shared U-Net trunk with two segmentation heads.
 
 | Stage | Operation | Feature channels |
 |---|---|---:|
-| Input | 64 × 64 temporal raster patch, 4 channels | 4 |
+| Input | 64 × 64 temporal raster patch, 6 channels (NDWI-only mode) | 6 |
 | Encoder 1 | Two 3 × 3 Conv2D + BatchNorm + ReLU layers | 32 |
 | Encoder 2 | 2 × 2 max-pooling, then two convolution layers | 64 |
 | Encoder 3 | 2 × 2 max-pooling, then two convolution layers | 128 |
@@ -33,12 +33,14 @@ The current temporal dataset builder creates four input channels:
 
 1. NDWI at time t−2, normalized from the theoretical [-1, 1] range to [0, 1].
 2. NDWI at time t−1, normalized in the same way.
-3. Valid-pixel mask for t−2.
-4. Valid-pixel mask for t−1.
+3. Signed NDWI change (t−1 minus t−2).
+4. Absolute NDWI change.
+5. Valid-pixel mask for t−2.
+6. Valid-pixel mask for t−1.
 
 The target is the next chronological seasonal scene. The two output heads predict its water mask/probability and its four relative NDWI classes.
 
-**Important:** this is a temporal NDWI U-Net. Although the repository includes a spectral-to-index workflow and sample spectral files, those raw Blue/Green/Red/NIR/SWIR bands are not currently part of the temporal U-Net training tensor. Do not describe the trained model as a multispectral U-Net until a co-registered, multi-date band stack is added to the dataset pipeline and used for training.
+**Important:** this is a temporal NDWI U-Net. An optional multispectral mode is now supported. It requires a co-registered 4/5-band stack (Blue, Green, Red, NIR, optional SWIR1) for every NDWI scene, stored in a companion directory with the same filenames. The network receives each date's NDWI and reflectance bands plus temporal differences. The existing sample spectral files are not a complete multi-date set, so the committed starter run remains NDWI-only.
 
 ## What the outputs mean
 
@@ -52,9 +54,9 @@ The current network predicts a future water/relative-NDWI segmentation from hist
 
 ## Data and validation requirements
 
-The present archive is small and contains gaps in the seasonal series. Training windows are built chronologically; missing seasons are not synthesized. A candidate is compared against a persistence baseline on held-out target scenes. The existing promotion gate must remain in place.
+The present archive is small and contains gaps in the seasonal series. The current NDWI-only input schema uses six channels; the multispectral schema uses 18 channels for four bands or 21 channels for five bands. Training windows are built chronologically; missing seasons are not synthesized. A candidate is compared against a persistence baseline on held-out target scenes. The existing promotion gate must remain in place.
 
-Current labels may come from the pixel CSV or Otsu/quantile pseudo-labels. Metrics against pseudo-labels measure agreement with those labels, not independent hydrological accuracy. For credible water-extent accuracy, supply independently reviewed water masks across multiple dates. For actual water depth in metres, supply aligned measured depth/bathymetry labels and train a separately defined regression head with appropriate physical validation.
+The supplied pixel CSV is the primary label source; partial labels are masked per pixel. Otsu/quantile pseudo-labels are used only when a scene has no usable CSV labels. Metrics against pseudo-labels measure agreement with those labels, not independent hydrological accuracy. For credible water-extent accuracy, supply independently reviewed water masks across multiple dates. For actual water depth in metres, supply aligned measured depth/bathymetry labels and train a separately defined regression head with appropriate physical validation.
 
 ## Recommended next research milestone: multispectral temporal U-Net
 
