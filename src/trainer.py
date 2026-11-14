@@ -312,8 +312,8 @@ def train_and_save_model(
             "deployment_eligible": bool(report.get("deployment_eligible", False)),
             "water_macro_f1": report["water_validation_metrics"]["macro_f1"],
             "relative_class_macro_f1": report["relative_class_validation_metrics"]["macro_f1"],
-            "persistence_water_macro_f1": baseline["water_metrics"]["macro_f1"],
-            "persistence_class_macro_f1": baseline["relative_class_metrics"]["macro_f1"],
+            "persistence_water_macro_f1": report["persistence_baseline"]["water_metrics"]["macro_f1"],
+            "persistence_class_macro_f1": report["persistence_baseline"]["relative_class_metrics"]["macro_f1"],
         })
 
     comparable = [item for item in registered if item["validation_loss"] is not None and np.isfinite(item["validation_loss"])]
