@@ -3,8 +3,6 @@ import json
 import os
 import numpy as np
 import rasterio
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
