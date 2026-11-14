@@ -198,3 +198,19 @@ artifact after the run. Review `training_report.json` and the label provenance
 before interpreting validation metrics. If the audit reports missing seasonal
 periods, the affected temporal windows are skipped; add the missing source
 scene before expecting a continuous seasonal history.
+
+
+### Local files versus GitHub Actions training
+
+The repository's ignore rules intentionally keep large `.tif`/`.tiff` and
+`.csv` files out of Git by default. Local training still discovers dated NDWI
+rasters placed in the project root. The local command also keeps the archive
+and active model in `knowledge_base/` between runs, enabling incremental
+fine-tuning after new scenes are added.
+
+The GitHub Actions training workflow can only see files committed to the
+repository. If you choose cloud training for newly acquired scenes, explicitly
+track and commit those input files (or use Git LFS / external object storage
+for larger scenes). The workflow caches `knowledge_base/` between runs so
+subsequent runs can restore the prior archive and active model before ingesting
+new scenes. Download the uploaded run artifact as a separate backup.

@@ -43,6 +43,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      - name: Restore persistent archive and active model
+        uses: actions/cache@v4
+        with:
+          path: knowledge_base/
+          key: ndwi-knowledgebase-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ndwi-knowledgebase-${{ runner.os }}-
+
       - name: Audit source rasters and labels
         run: |
           python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
