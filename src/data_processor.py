@@ -3,6 +3,8 @@
 NDWI supports water detection/extent analysis, not bathymetric measurement.
 Physical depth and volume are only reported when measured depth data is supplied.
 """
+
+from pyproj import CRS as PyprojCRS
 from __future__ import annotations
 import glob
 import os
@@ -43,7 +45,8 @@ class LakeDataProcessor:
                 fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
                 pixel_area = abs(transform.a * transform.e - transform.b * transform.d) * fx * fy
             elif crs.is_geographic:
-                geod = crs.get_geod()
+                # geod = crs.get_geod()
+                geod = PyprojCRS.from_user_input(crs).get_geod()
                 row, col = src.height // 2, src.width // 2
                 corners = [
                     rasterio.transform.xy(transform, row, col, offset="ul"),
