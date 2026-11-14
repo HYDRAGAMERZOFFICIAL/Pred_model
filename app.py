@@ -354,7 +354,7 @@ if current_tif and os.path.exists(current_tif):
 
             band_paths = {}
             multiband_file = None
-            preset_choice = 'sentinel2_10m'
+            preset_choice = 'auto'
 
             if input_mode == "🌟 Demonstration Dataset (Jakkur Lake Multi-Spectral Bands)":
                 demo_dir = "sample_spectral_data"
@@ -415,7 +415,12 @@ if current_tif and os.path.exists(current_tif):
                         os.makedirs(os.path.dirname(multiband_file), exist_ok=True)
                         with open(multiband_file, "wb") as f:
                             f.write(up_mb.getbuffer())
-                    preset_choice = st.selectbox("Band Layout Preset", list(sp_processor.PRESETS.keys()), index=0, key="preset_choice")
+                    preset_choice = st.selectbox(
+                        "Band Layout Preset",
+                        ["auto", *sp_processor.PRESETS.keys()],
+                        index=0,
+                        key="preset_choice"
+                    )
 
         with conv_col2:
             st.markdown("### 2. Spectral Algorithm & Parameters")

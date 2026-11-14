@@ -430,6 +430,11 @@ class SpectrumNDWIProcessor:
         Automatically detects band descriptions when available.
         """
         with rasterio.open(multiband_path) as src:
+            if src.count < 2:
+                raise ValueError(
+                    "This raster contains only one band, so it cannot be used as a multi-band spectral input. "
+                    "Use 'Upload Individual Spectral Bands' and provide the bands required by the selected index."
+                )
             ref_meta = src.meta.copy()
             ref_meta.update(count=1, dtype='float32')
             nodata = src.nodata
@@ -456,18 +461,31 @@ class SpectrumNDWIProcessor:
                         # Standard 4-band B02, B03, B04, B08 composite
                         mapping = self.PRESETS['sentinel2_10m']
                     else:
-                        raise ValueError(f"Input raster has {src.count} bands. Specify band mapping or preset.")
+                        raise ValueError(
+                            f"Could not infer a spectral band layout from this {src.count}-band raster. "
+                            "Choose a matching band layout preset or provide band indices."
+                        )
+
+            invalid_bands = {
+                name: index for name, index in mapping.items()
+                if not 1 <= index <= src.count
+            }
+            if invalid_bands:
+                invalid_list = ", ".join(
+                    f"{name}={index}" for name, index in invalid_bands.items()
+                )
+                raise ValueError(
+                    f"The selected band layout references {invalid_list}, but this raster has "
+                    f"only {src.count} band(s). Choose a matching layout preset."
+                )
 
             aligned_bands = {}
             for b_name, b_idx in mapping.items():
-                if 1 <= b_idx <= src.count:
-                    arr = src.read(b_idx).astype(np.float32)
-                    if nodata is not None:
-                        arr[arr == nodata] = np.nan
-                    arr[~np.isfinite(arr)] = np.nan
-                    aligned_bands[b_name] = arr
-                else:
-                    raise IndexError(f"Band index {b_idx} for '{b_name}' is outside range 1..{src.count}")
+                arr = src.read(b_idx).astype(np.float32)
+                if nodata is not None:
+                    arr[arr == nodata] = np.nan
+                arr[~np.isfinite(arr)] = np.nan
+                aligned_bands[b_name] = arr
 
         # Master valid mask
         valid_mask = np.ones(aligned_bands[list(aligned_bands.keys())[0]].shape, dtype=bool)

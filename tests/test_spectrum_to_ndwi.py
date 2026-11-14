@@ -6,9 +6,11 @@ and end-to-end integration with the existing LakeDataProcessor.
 """
 
 import os
+import tempfile
 import unittest
 import numpy as np
 import rasterio
+from rasterio.transform import from_origin
 
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 from src.data_processor import LakeDataProcessor
@@ -77,6 +79,27 @@ class TestSpectrumNDWI(unittest.TestCase):
         res = self.processor.process_from_multiband(stack_path, preset='planetscope', index_type='NDWI')
         self.assertEqual(res['index_raster'].shape, (162, 97))
         self.assertTrue(res['metrics']['water_pixels'] > 1000)
+
+    def test_single_band_input_reports_multiband_requirement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "single_band.tif")
+            with rasterio.open(
+                path,
+                "w",
+                driver="GTiff",
+                height=2,
+                width=2,
+                count=1,
+                dtype="float32",
+                crs="EPSG:32643",
+                transform=from_origin(500000, 1500000, 10, 10),
+            ) as dst:
+                dst.write(np.ones((2, 2), dtype=np.float32), 1)
+
+            with self.assertRaisesRegex(ValueError, "only one band"):
+                self.processor.process_from_multiband(
+                    path, preset="sentinel2_b8_b4_b3", index_type="NDWI"
+                )
 
     def test_zero_threshold_and_cleanup(self):
         """Test standard NDWI > 0 thresholding and small component cleanup"""
