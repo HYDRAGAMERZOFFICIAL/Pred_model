@@ -91,9 +91,12 @@ def _labels_from_csv(frame, shape, raster_valid):
     water[rows, cols] = water_values
     class_map[rows, cols] = classes
     coverage = float((seen & raster_valid).sum()) / max(int(raster_valid.sum()), 1)
-    if coverage < 0.95:
-        return None
+    # The supplied dataset is intentionally sparse pixel supervision. Keep every
+    # valid annotated pixel and mask all unlabelled pixels from the loss; never
+    # replace a partially labelled scene with synthetic Otsu/quantile targets.
     valid = raster_valid & seen
+    if not valid.any():
+        return None
     if np.any((class_map[valid] > 0) != (water[valid] > 0)):
         raise ValueError("CSV water and depth_class columns disagree; expected water == (depth_class > 0).")
     return water, class_map, valid, coverage
@@ -198,7 +201,7 @@ def _extract_sequence_patches(scenes, target_index, patch_size, stride, min_vali
 
 def prepare_temporal_training_data(
     raster_paths, dataset_csv=None, patch_size=64, stride=32,
-    validation_sequences=2, min_valid_fraction=0.5,
+    validation_sequences=2, min_valid_fraction=0.01,
 ):
     """Chronologically split target scenes before patch extraction."""
     scenes = load_temporal_scenes(raster_paths, dataset_csv)
@@ -247,6 +250,7 @@ def prepare_temporal_training_data(
         "label_sources": sorted({scene["label_source"] for scene in scenes}),
         "csv_coverage_by_scene": {scene["name"]: scene["csv_coverage"] for scene in scenes},
         "normalization": "fixed NDWI theoretical range [-1, 1] mapped to [0, 1]",
-        "target_semantics": "Otsu-derived water and per-scene NDWI quantile classes; pseudo-labels, not independent ground truth",
+        "target_semantics": "Use every supplied CSV-labelled pixel; unlabelled pixels are masked from supervised loss. Otsu/quantile pseudo-labels are used only when a scene has no usable CSV labels.",
+        "minimum_label_fraction_per_patch": float(min_valid_fraction),
     }
     return x_train, y_train, x_val, y_val, scenes, metadata
