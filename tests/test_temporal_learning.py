@@ -53,7 +53,8 @@ class TestTemporalLearning(unittest.TestCase):
 
     def test_csv_labels_reject_inconsistent_water_class(self):
         frame = pd.DataFrame({
-            "row": [0], "column": [0], "water": [0], "depth_class": [2]
+            "row": [0, 0, 1, 1], "column": [0, 1, 0, 1],
+            "water": [0, 0, 0, 0], "depth_class": [2, 0, 0, 0]
         })
         with self.assertRaisesRegex(ValueError, "disagree"):
             _labels_from_csv(frame, (2, 2), np.ones((2, 2), dtype=bool))
