@@ -58,15 +58,15 @@ The present archive is small and contains gaps in the seasonal series. The curre
 
 The supplied pixel CSV is the primary label source; partial labels are masked per pixel. Otsu/quantile pseudo-labels are used only when a scene has no usable CSV labels. Metrics against pseudo-labels measure agreement with those labels, not independent hydrological accuracy. For credible water-extent accuracy, supply independently reviewed water masks across multiple dates. For actual water depth in metres, supply aligned measured depth/bathymetry labels and train a separately defined regression head with appropriate physical validation.
 
-## Recommended next research milestone: multispectral temporal U-Net
+## Multispectral training requirements and next research milestone
 
-To extend the current model into a true multispectral temporal U-Net:
+The optional multispectral input pipeline is implemented, but the starter repository does not include a complete multi-date stack for all 11 NDWI scenes. To use it:
 
-1. Collect multiple dates of co-registered surface-reflectance bands (for example Blue, Green, Red, NIR and SWIR) for the same site and seasons.
-2. Harmonize sensor, scale/offset, cloud masks, CRS, pixel size, dimensions and affine transform.
-3. Build temporal input tensors from the actual bands at t−2 and t−1; preserve per-band validity masks.
-4. Use independently reviewed water masks as segmentation targets. Keep training, validation and test splits separated by acquisition date, not by random patches.
-5. Train the CNN U-Net and compare it with persistence and simple spectral-index baselines on identical held-out scenes.
-6. Only add a depth-in-metres regression head after measured depth/bathymetry targets exist.
+1. Collect co-registered surface-reflectance bands (Blue, Green, Red, NIR and optional SWIR1) for every NDWI acquisition date.
+2. Store one 4/5-band GeoTIFF per date in a companion folder, using the exact corresponding NDWI filename.
+3. Harmonize sensor, scale/offset, cloud masks, CRS, pixel size, dimensions and affine transform. Resample 20 m SWIR to the NDWI reference grid before stacking.
+4. Run the dataset audit with `--spectral-dir`; it checks that every scene has a stack and that each stack matches the NDWI grid.
+5. Train with `--spectral-dir`. The knowledge base archives the stacks alongside the NDWI scenes, and prediction loads the archived inputs required by that model version.
+6. Compare the resulting U-Net with persistence and spectral-index baselines on identical held-out dates. Use independently reviewed masks for external validation.
 
-This extension changes the input schema and model weights, so it should be introduced as a new model version. Do not overwrite or silently reinterpret existing NDWI-only model files.
+This changes the input schema and model weights, so it creates a new model version. Do not overwrite or silently reinterpret existing NDWI-only model files. Only add a depth-in-metres regression head after measured bathymetry/depth labels exist.
