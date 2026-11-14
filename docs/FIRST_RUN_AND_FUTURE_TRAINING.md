@@ -105,7 +105,7 @@ NDWI_JAN_APR_2022.tif,0,1,1,1
 - Consistency rule: water == (depth_class > 0).
 - Do not include fractional coordinates, duplicate pixel coordinates, or invalid/missing class values.
 
-These are **relative NDWI classes, not measured depth in metres**. The repository's current CSV contains 87,901 labelled rows across 11 scenes (7,991 rows per scene), so it is sparse pixel supervision rather than a complete mask. The U-Net now uses every valid CSV-labelled pixel and masks unlabelled pixels out of the loss. It does not discard the CSV merely because coverage is below 95%. Otsu/quantile pseudo-labels are used only for a scene with no usable CSV labels. These labels are algorithm-derived unless independently reviewed; agreement with them is not independent real-world accuracy.
+These are **relative NDWI classes, not measured depth in metres**. The repository's current CSV contains 87,901 labelled rows across 11 scenes (7,991 rows per scene). Each raster has 7,991 valid pixels, and the CSV covers all valid pixels; the remaining cells are NoData. The trainer also supports partially labelled future scenes by using every supplied labelled pixel and masking unlabelled pixels out of the loss. Otsu/quantile pseudo-labels are used only for a scene with no usable CSV labels. These labels are algorithm-derived unless independently reviewed; agreement with them is not independent real-world accuracy.
 
 ## 4. First training run
 
