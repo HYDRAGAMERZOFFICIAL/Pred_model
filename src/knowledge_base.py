@@ -89,13 +89,16 @@ def _labels_for_scene(frame, basename, source_path):
     return group
 
 
-def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base"):
+def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base", spectral_dir=None):
     """Append scenes and per-scene pixel labels; identical bytes are idempotent."""
     root = Path(archive_dir)
     scenes_dir = root / "archive" / "scenes"
     labels_dir = root / "archive" / "labels"
+    spectral_archive_dir = root / "archive" / "spectral"
     scenes_dir.mkdir(parents=True, exist_ok=True)
     labels_dir.mkdir(parents=True, exist_ok=True)
+    if spectral_dir:
+        spectral_archive_dir.mkdir(parents=True, exist_ok=True)
 
     labels = pd.read_csv(dataset_csv) if dataset_csv and os.path.isfile(dataset_csv) else None
     if labels is not None and "image" not in labels.columns:
@@ -105,6 +108,23 @@ def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base"):
     by_hash = {scene["sha256"]: scene for scene in manifest["scenes"]}
     by_source = {scene.get("source_name"): scene for scene in manifest["scenes"]}
     added, duplicates, label_rows = [], [], 0
+
+    def archive_spectral_for_scene(source_path, scene):
+        if not spectral_dir:
+            return
+        source_stack = None
+        for suffix in (".tif", ".tiff"):
+            candidate = Path(spectral_dir) / (Path(source_path).stem + suffix)
+            if candidate.is_file():
+                source_stack = candidate
+                break
+        if source_stack is None:
+            return
+        target = spectral_archive_dir / Path(scene["archive_path"]).name
+        if not target.exists():
+            shutil.copy2(source_stack, target)
+        scene["spectral_archive_path"] = str(target.as_posix())
+        scene["spectral_sha256"] = _sha256(target)
 
     for source in sorted({str(Path(p).resolve()) for p in image_paths}, key=temporal_sort_key):
         if not os.path.isfile(source):
@@ -129,6 +149,7 @@ def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base"):
                     existing["label_rows"] = int(len(group))
                 existing["labels_updated_at"] = _now()
                 label_rows += int(len(group))
+            archive_spectral_for_scene(source, existing)
             duplicates.append({"source": source, "archive_path": existing["archive_path"], "reason": "identical_sha256"})
             continue
 
@@ -158,6 +179,7 @@ def ingest_scenes(image_paths, dataset_csv=None, archive_dir="knowledge_base"):
             scene["label_rows"] = int(len(group))
             label_rows += int(len(group))
 
+        archive_spectral_for_scene(source, scene)
         manifest["scenes"].append(scene)
         by_hash[digest] = scene
         by_source[original_name] = scene
@@ -181,6 +203,12 @@ def archived_raster_paths(archive_dir="knowledge_base"):
     manifest = _load_manifest(archive_dir)
     paths = [scene["archive_path"] for scene in manifest["scenes"] if os.path.isfile(scene["archive_path"])]
     return sorted(paths, key=temporal_sort_key)
+
+
+
+def archived_spectral_dir(archive_dir="knowledge_base"):
+    path = Path(archive_dir) / "archive" / "spectral"
+    return str(path) if path.is_dir() else None
 
 
 def build_training_label_csv(archive_dir="knowledge_base"):
@@ -251,12 +279,13 @@ def main():
     parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--archive-dir", default="knowledge_base")
     parser.add_argument("--images", nargs="*", default=None, help="Optional explicit GeoTIFF paths.")
+    parser.add_argument("--spectral-dir", default=None, help="Optional folder with one co-registered 4/5-band stack per NDWI scene, named with the same scene filename.")
     args = parser.parse_args()
     paths = args.images or discover_ndwi_rasters(args.data_dir)
     if not paths:
         raise SystemExit("No dated NDWI GeoTIFFs found. Supply --images or place dated scenes in --data-dir.")
     csv_path = args.dataset_csv if os.path.isabs(args.dataset_csv) else os.path.join(args.data_dir, args.dataset_csv)
-    result = ingest_scenes(paths, csv_path if os.path.isfile(csv_path) else None, args.archive_dir)
+    result = ingest_scenes(paths, csv_path if os.path.isfile(csv_path) else None, args.archive_dir, args.spectral_dir)
     print(json.dumps(result, indent=2))
 
 
