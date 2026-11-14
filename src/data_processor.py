@@ -8,6 +8,7 @@ import glob
 import os
 import numpy as np
 import rasterio
+from pyproj import CRS as PyprojCRS
 from skimage.filters import threshold_otsu
 
 
@@ -37,7 +38,7 @@ class LakeDataProcessor:
             if crs is None:
                 raise ValueError(f"{file_path} has no CRS; pixel area is unknown.")
             if crs.is_projected:
-                axes = crs.axis_info[:2]
+                axes = PyprojCRS.from_user_input(crs).axis_info[:2]
                 fx = axes[0].unit_conversion_factor if axes else 1.0
                 fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
                 pixel_area = abs(transform.a * transform.e - transform.b * transform.d) * fx * fy

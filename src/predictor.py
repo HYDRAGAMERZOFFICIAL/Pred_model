@@ -3,6 +3,7 @@ import json
 import os
 import numpy as np
 import rasterio
+from pyproj import CRS as PyprojCRS
 import tensorflow as tf
 
 from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, _starts
@@ -71,7 +72,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
     with rasterio.open(second["path"]) as src:
         crs = src.crs
         if crs is not None and crs.is_projected:
-            axes = crs.axis_info[:2]
+            axes = PyprojCRS.from_user_input(crs).axis_info[:2]
             fx = axes[0].unit_conversion_factor if axes else 1.0
             fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
             transform = src.transform
