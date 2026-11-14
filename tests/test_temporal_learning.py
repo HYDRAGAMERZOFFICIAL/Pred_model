@@ -6,7 +6,7 @@ import pandas as pd
 import rasterio
 from rasterio.transform import from_origin
 
-from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data, _labels_from_csv
+from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data, build_temporal_input, _labels_from_csv
 
 
 class TestTemporalLearning(unittest.TestCase):
@@ -17,6 +17,22 @@ class TestTemporalLearning(unittest.TestCase):
             transform=from_origin(500000, 1500000, 10, 10), nodata=-9999,
         ) as dst:
             dst.write(data.astype(np.float32), 1)
+
+    def test_temporal_features_include_signed_and_absolute_change(self):
+        first = {
+            "normalized": np.full((2, 2), 0.2, dtype=np.float32),
+            "valid": np.ones((2, 2), dtype=bool),
+        }
+        second = {
+            "normalized": np.full((2, 2), 0.7, dtype=np.float32),
+            "valid": np.ones((2, 2), dtype=bool),
+        }
+        features = build_temporal_input(first, second)
+        self.assertEqual(features.shape, (2, 2, 6))
+        self.assertTrue(np.allclose(features[..., 2], 0.5))
+        self.assertTrue(np.allclose(features[..., 3], 0.5))
+        legacy = build_temporal_input(first, second, legacy=True)
+        self.assertEqual(legacy.shape, (2, 2, 4))
 
     def test_seasonal_sort(self):
         names = ["NDWI_SEP_DEC_22.tif", "NDWI_JAN_APR_23.tif", "NDWI_MAY_AUG_22.tif"]
@@ -102,6 +118,9 @@ class TestTemporalLearning(unittest.TestCase):
             self.assertGreater(len(x_train), 0)
             self.assertGreater(len(x_val), 0)
             self.assertEqual(meta["minimum_label_fraction_per_patch"], 0.01)
+            self.assertEqual(x_train.shape[-1], 6)
+            self.assertEqual(y_train["relative_class_probabilities"].shape[-1], 3)
+            self.assertEqual(len(meta["class_loss_weights"]), 4)
 
     def test_csv_labels_are_reconstructed_and_used(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -131,8 +150,8 @@ class TestTemporalLearning(unittest.TestCase):
             x_train, y_train, x_val, y_val, _, meta = prepare_temporal_training_data(
                 paths, csv_path, patch_size=8, stride=8, validation_sequences=1
             )
-            self.assertEqual(x_train.shape[-1], 4)
-            self.assertEqual(y_train["relative_class_probabilities"].shape[-1], 2)
+            self.assertEqual(x_train.shape[-1], 6)
+            self.assertEqual(y_train["relative_class_probabilities"].shape[-1], 3)
             self.assertGreater(len(x_val), 0)
             self.assertEqual(meta["validation_sequences"], 1)
 
