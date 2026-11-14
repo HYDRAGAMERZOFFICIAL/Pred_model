@@ -52,11 +52,12 @@ patch extraction. It saves:
 - knowledge_base/multitask_training_report.json
 
 The current repository includes 11 dated NDWI GeoTIFF scenes and a pixel CSV
-with 87,901 labelled rows (7,991 rows per scene). The CSV is sparse pixel
-supervision, not a full-raster mask: the trainer keeps every supplied label and
-masks unlabelled pixels out of the loss. Otsu/quantile pseudo-labels are used
-only when a scene has no usable CSV labels. The report records label provenance
-and per-scene coverage.
+with 87,901 labelled rows (7,991 rows per scene). Each raster has 7,991 valid
+pixels and the CSV covers all of them; the remaining raster cells are NoData.
+The trainer also supports partially labelled future scenes by masking
+unlabelled pixels out of the loss. Otsu/quantile pseudo-labels are used only
+when a scene has no usable CSV labels. The report records label provenance and
+per-scene coverage.
 
 ## Seasonal spatial prediction
 
