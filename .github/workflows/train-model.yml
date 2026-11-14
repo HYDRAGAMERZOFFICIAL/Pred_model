@@ -1,6 +1,9 @@
 name: Train NDWI model
 
 on:
+  push:
+    paths:
+      - "training/START_BASELINE_RUN.txt"
   workflow_dispatch:
     inputs:
       epochs:
@@ -28,6 +31,8 @@ jobs:
     env:
       TF_CPP_MIN_LOG_LEVEL: "2"
       PYTHONUNBUFFERED: "1"
+      TRAIN_EPOCHS: ${{ inputs.epochs || '50' }}
+      TRAIN_MODE: ${{ inputs.mode || 'both' }}
     steps:
       - name: Check out repository data and source
         uses: actions/checkout@v4
@@ -57,7 +62,23 @@ jobs:
 
       - name: Train and validate model candidates
         run: |
-          python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode "${{ inputs.mode }}" --patch-size 64 --stride 32 --epochs "${{ inputs.epochs }}" --batch-size 8 --validation-sequences 2
+          python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode "$TRAIN_MODE" --patch-size 64 --stride 32 --epochs "$TRAIN_EPOCHS" --batch-size 8 --validation-sequences 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report_path = Path("knowledge_base/multitask_training_report.json")
+          if report_path.exists():
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+              print(json.dumps({
+                  "training_mode": report.get("training_mode"),
+                  "label_sources": report.get("label_sources"),
+                  "water_validation_metrics": report.get("water_validation_metrics"),
+                  "relative_class_validation_metrics": report.get("relative_class_validation_metrics"),
+                  "accuracy_interpretation": report.get("accuracy_interpretation"),
+              }, indent=2))
+          else:
+              raise SystemExit("Training completed without producing the active model report.")
+          PY
 
       - name: Upload audit, model versions, and training reports
         if: always()
