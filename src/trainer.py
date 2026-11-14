@@ -109,6 +109,9 @@ def _train_candidate(
             },
             compile=False,
         )
+    model = _compile_loaded_model(model, learning_rate)
+    evaluated = model.evaluate(x_val, y_val, batch_size=batch_size, verbose=0, return_dict=True)
+    evaluated_val_loss = float(evaluated["loss"])
     final_path = os.path.join(output_dir, "model.keras")
     model.save(final_path)
 
@@ -138,7 +141,8 @@ def _train_candidate(
         "input_channels": 4,
         "epochs_requested": epochs,
         "epochs_completed": len(history.history.get("loss", [])),
-        "best_validation_loss": float(min(val_losses)) if val_losses else None,
+        "best_validation_loss": evaluated_val_loss,
+        "best_epoch_history_validation_loss": float(min(val_losses)) if val_losses else None,
         "seed": seed,
         "validation_protocol": "chronological target-scene holdout; all patches from a target scene remain in one split",
         "accuracy_interpretation": "metrics measure agreement with generated Otsu/quantile or supplied CSV labels, not independent real-world accuracy",
@@ -215,16 +219,37 @@ def train_and_save_model(
     if not comparable:
         raise RuntimeError("No candidate produced a finite validation loss; no model was promoted.")
     best = min(comparable, key=lambda item: item["validation_loss"])
-    # Never replace the active model with a candidate that scores worse on the same holdout.
-    previous_report_path = os.path.join(output_dir, "multitask_training_report.json")
-    previous_loss = None
-    if os.path.isfile(previous_report_path):
+    # Re-evaluate the existing active model on this run's exact validation scenes.
+    # Comparing with a historical report would be invalid because the holdout can
+    # change whenever new chronological scenes are ingested.
+    active_baseline_loss = None
+    if previous_model and os.path.isfile(previous_model):
         try:
-            with open(previous_report_path, encoding="utf-8") as stream:
-                previous_loss = json.load(stream).get("best_validation_loss")
-        except (OSError, ValueError):
-            previous_loss = None
-    promoted = previous_loss is None or best["validation_loss"] <= float(previous_loss)
+            active_model = tf.keras.models.load_model(
+                previous_model,
+                custom_objects={
+                    "masked_water_bce": masked_water_bce,
+                    "masked_class_crossentropy": masked_class_crossentropy,
+                    "masked_water_iou": masked_water_iou,
+                    "masked_class_accuracy": masked_class_accuracy,
+                },
+                compile=False,
+            )
+            active_model = _compile_loaded_model(active_model, learning_rate)
+            baseline_metrics = active_model.evaluate(
+                x_val, y_val, batch_size=batch_size, verbose=0, return_dict=True
+            )
+            active_baseline_loss = float(baseline_metrics["loss"])
+        except Exception as exc:
+            print(f"WARNING: Existing active model could not be evaluated on this holdout; promotion is disabled: {exc}")
+
+    promoted = (
+        not (previous_model and os.path.isfile(previous_model))
+        or (
+            active_baseline_loss is not None
+            and best["validation_loss"] <= active_baseline_loss
+        )
+    )
     if promoted:
         promote_model_version(best["model_path"], best["report_path"], output_dir)
     result = {
@@ -233,7 +258,7 @@ def train_and_save_model(
         "candidates": registered,
         "selected_candidate": best["mode"],
         "selected_validation_loss": best["validation_loss"],
-        "previous_active_validation_loss": previous_loss,
+        "previous_active_validation_loss_on_current_holdout": active_baseline_loss,
         "promoted_to_active": promoted,
         "active_model": active_model_path(output_dir),
         "archive_manifest": os.path.join(output_dir, "archive", "manifest.json"),

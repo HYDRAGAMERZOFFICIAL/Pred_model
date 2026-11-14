@@ -120,8 +120,10 @@ weights and training report. Run logs are stored under `knowledge_base/runs/`.
 The active compatibility files
 (`ndwi_multitask_unet.keras` and `multitask_training_report.json`) are updated
 only when the best new candidate has a finite validation loss no worse than the
-previous active model's recorded validation loss. A failed or worse run leaves
-the current active model untouched.
+previous active model after re-evaluating that active model on the exact same
+current chronological holdout. This avoids comparing scores from different
+validation periods. A failed, incomparable or worse run leaves the current
+active model untouched.
 
 Validation metrics still measure agreement with the generated CSV or
 Otsu/quantile labels. They are not independent field-validated accuracy.
