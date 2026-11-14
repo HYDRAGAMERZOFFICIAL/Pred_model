@@ -25,12 +25,12 @@ A TensorFlow/Keras deep-learning project built around a convolutional U-Net enco
 
 Python 3.10–3.12 is recommended.
 
-For the complete first-run and future-data workflow, see [First Run and Future Training Guide](docs/FIRST_RUN_AND_FUTURE_TRAINING.md). For Windows setup and troubleshooting, see [SETUP_AND_RUN.md](SETUP_AND_RUN.md).
+For the complete first-run and future-data workflow, see [First Run and Future Training Guide](docs/FIRST_RUN_AND_FUTURE_TRAINING.md). For the correct Windows setup order, including audit and training **before starting Streamlit**, see [SETUP_AND_RUN.md](SETUP_AND_RUN.md).
 
 ```bash
 python -m pip install -r requirements.txt
+python -m compileall -q app.py src tests
 python -m unittest discover -s tests -v
-streamlit run app.py
 ```
 
 ## Train the multi-task temporal U-Net
@@ -41,7 +41,7 @@ image, row, column, water and depth_class, as produced by the dataset-generation
 script.
 
 ```bash
-python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50
+python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
 ```
 
 The trainer creates a chronological validation holdout by target scene before
@@ -59,6 +59,18 @@ The trainer also supports partially labelled future scenes by masking
 unlabelled pixels out of the loss. Otsu/quantile pseudo-labels are used only
 when a scene has no usable CSV labels. The report records label provenance and
 per-scene coverage.
+
+## Open the dashboard after training
+
+After reviewing the latest `knowledge_base/runs/<run-id>/run_summary.json` and
+candidate training report, start Streamlit:
+
+```bash
+streamlit run app.py
+```
+
+The dashboard sidebar displays dataset and model readiness. Candidates that
+have not passed validation are marked as experimental previews.
 
 ## Seasonal spatial prediction
 
