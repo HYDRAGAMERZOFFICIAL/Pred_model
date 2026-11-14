@@ -226,6 +226,15 @@ git push origin main
 
 Use Git LFS or external object storage for larger collections. The Actions artifact is a backup of that run's knowledge base; download it and preserve it outside the temporary artifact-retention window.
 
+To use a cloud-trained candidate locally:
+1. Open the completed workflow run in GitHub Actions.
+2. Download its `ndwi-cnn-unet-knowledge-base-<run>` artifact.
+3. Back up any existing local `knowledge_base/` folder.
+4. Extract the artifact into the project root so its `knowledge_base/` folder sits beside `app.py`.
+5. Run the local tests, then start Streamlit using the command in section 10.
+
+The artifact contains model versions, reports, archived source scenes/labels and the dataset audit. Prediction images are generated locally when you request a forecast from the dashboard.
+
 ## Troubleshooting
 
 - **Missing Python module:** activate/use `.venv` and reinstall `requirements.txt`.
