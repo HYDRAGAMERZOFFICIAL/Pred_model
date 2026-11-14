@@ -73,6 +73,36 @@ class TestTemporalLearning(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disagree"):
             _labels_from_csv(frame, (2, 2), np.ones((2, 2), dtype=bool))
 
+    def test_sparse_csv_labels_produce_training_patches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            frames = []
+            seasons = ["JAN_APR", "MAY_AUG", "SEP_DEC", "JAN_APR"]
+            years = [2022, 2022, 2022, 2023]
+            for index, (season, year) in enumerate(zip(seasons, years)):
+                name = f"NDWI_{season}_{str(year)[-2:]}.tif"
+                path = os.path.join(tmp, name)
+                data = np.full((16, 16), -0.2 + index * 0.05, dtype=np.float32)
+                self.write_scene(path, data)
+                paths.append(path)
+                frames.append(pd.DataFrame({
+                    "image": [name] * 4,
+                    "row": [1, 1, 2, 2],
+                    "column": [1, 2, 1, 2],
+                    "water": [0, 1, 0, 1],
+                    "depth_class": [0, 1, 0, 2],
+                }))
+            csv_path = os.path.join(tmp, "sparse_labels.csv")
+            pd.concat(frames, ignore_index=True).to_csv(csv_path, index=False)
+            x_train, y_train, x_val, y_val, scenes, meta = prepare_temporal_training_data(
+                paths, csv_path, patch_size=8, stride=8, validation_sequences=1
+            )
+            self.assertTrue(all(s["label_source"] == "generated_pixel_csv" for s in scenes))
+            self.assertAlmostEqual(scenes[0]["csv_coverage"], 4 / 256)
+            self.assertGreater(len(x_train), 0)
+            self.assertGreater(len(x_val), 0)
+            self.assertEqual(meta["minimum_label_fraction_per_patch"], 0.01)
+
     def test_csv_labels_are_reconstructed_and_used(self):
         with tempfile.TemporaryDirectory() as tmp:
             paths = []
