@@ -1,8 +1,8 @@
-# Lake Water Analysis & Multi-Task Prediction
+# Temporal CNN U-Net for Lake Water Segmentation and Prediction
 
-A geospatial workflow for QGIS-generated NDWI GeoTIFFs, Otsu water-extent
-analysis, pixel-level relative NDWI classes, temporal U-Net prediction and
-annual water-area trend projection.
+A TensorFlow/Keras deep-learning project built around a convolutional U-Net encoder-decoder with skip connections and two pixel-wise prediction heads. It learns from chronological NDWI raster patches to predict next-season water probability and four relative NDWI classes, with georeferenced GeoTIFF and PNG exports.
+
+**Current scope:** the temporal U-Net uses two historical NDWI rasters plus their validity masks (four input channels). The repository also contains a separate spectral-to-index workflow, but raw multispectral bands are not yet inputs to temporal U-Net training. See [CNN U-Net Architecture](docs/CNN_UNET_ARCHITECTURE.md) for the exact network and the roadmap to a multispectral temporal U-Net.
 
 ## Scientific scope
 
