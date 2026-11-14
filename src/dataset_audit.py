@@ -17,7 +17,7 @@ from src.temporal_learning import (
 )
 
 
-def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
+def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", spectral_dir=None):
     csv_path = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
     raster_paths = discover_ndwi_rasters(data_dir)
     report = {
@@ -86,7 +86,14 @@ def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
 
     if os.path.isfile(csv_path):
         try:
-            scenes = load_temporal_scenes(raster_paths, csv_path)
+            scenes = load_temporal_scenes(raster_paths, csv_path, spectral_dir)
+            if spectral_dir:
+                report["multispectral"] = {
+                    "directory": os.path.abspath(spectral_dir),
+                    "band_count": int(scenes[0]["spectral"].shape[0]),
+                    "band_order": ["blue", "green", "red", "nir", "swir1"][:scenes[0]["spectral"].shape[0]],
+                    "all_scenes_have_aligned_stacks": all(scene.get("spectral") is not None for scene in scenes),
+                }
             report["label_sources"] = sorted({scene["label_source"] for scene in scenes})
             report["csv_coverage_by_scene"] = {
                 scene["name"]: float(scene["csv_coverage"]) for scene in scenes
@@ -133,8 +140,9 @@ def main():
     parser.add_argument("--data-dir", default=".")
     parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--output", default="dataset_audit_report.json")
+    parser.add_argument("--spectral-dir", default=None, help="Optional directory containing aligned per-scene 4/5-band stacks.")
     args = parser.parse_args()
-    report = audit_dataset(args.data_dir, args.dataset_csv)
+    report = audit_dataset(args.data_dir, args.dataset_csv, args.spectral_dir)
     with open(args.output, "w", encoding="utf-8") as stream:
         json.dump(report, stream, indent=2)
     print(json.dumps(report, indent=2))
