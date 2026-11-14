@@ -5,7 +5,10 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/train-existing-dataset.yml"
+      - "NDWI_*.tif"
+      - "NDWI_pixel_depth_dataset.csv"
+      - "src/**"
+      - "tests/**"
 
 permissions:
   contents: read
