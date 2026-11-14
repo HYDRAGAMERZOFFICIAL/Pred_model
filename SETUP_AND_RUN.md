@@ -123,3 +123,43 @@ Run the test suite from the project root:
 For interpretation limits and model behavior, see
 [README.md](README.md) and
 [docs/DATA_AND_MODEL_GUIDELINES.md](docs/DATA_AND_MODEL_GUIDELINES.md).
+
+
+## Prediction image exports
+
+After a successful seasonal prediction, the application creates three PNG previews in
+`outputs/` in addition to the georeferenced GeoTIFFs:
+
+- `next_season_water_probability.png`: continuous probability from 0 to 1.
+- `next_season_water_extent.png`: binary predicted water / non-water map.
+- `next_season_relative_classes.png`: four relative NDWI classes (0–3).
+
+The PNGs are visualization products and do not retain GeoTIFF georeferencing.
+Use the corresponding `.tif` files in GIS software when spatial coordinates,
+CRS, and raster metadata are required.
+
+## Adding future training data
+
+Keep each new NDWI scene as a dated, single-band GeoTIFF with a valid CRS and
+the same pixel grid as the existing time series. Use a filename containing
+the year and one supported season token, for example
+`NDWI_JAN_APR_26.tif`, `NDWI_MAY_AUG_26.tif`, or
+`NDWI_SEP_DEC_26.tif`. Do not overwrite an older scene.
+
+If independently reviewed pixel labels are available, append them to the CSV
+with columns `image,row,column,water,depth_class`; use 0/1 for water and
+0–3 for relative classes, with `water == (depth_class > 0)`. Keep the
+`image` value equal to the GeoTIFF filename. Then run ingestion followed by
+training:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv
+.\.venv\Scripts\python.exe -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50
+```
+
+The archive is append-only and content-addressed. Re-ingesting identical
+GeoTIFF bytes does not duplicate a scene; new scenes and newly supplied pixel
+labels are incorporated into the next training run. Training creates versioned
+candidates and promotes a candidate only when it passes the configured
+validation-loss comparison. Back up `knowledge_base/` separately because it
+contains the archive, model versions, active model, and reports.

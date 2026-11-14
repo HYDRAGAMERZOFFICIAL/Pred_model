@@ -137,3 +137,20 @@ For hundreds of thousands of scenes, the next scale step is chunked COG/Zarr
 storage and streaming patch generation. This initial archive implementation
 stores immutable GeoTIFF copies and per-scene CSV labels; it does not yet
 implement distributed storage or out-of-core model training.
+
+
+## Prediction image products
+
+The seasonal spatial predictor writes PNG previews for water probability,
+binary water extent, and relative NDWI classes alongside georeferenced
+GeoTIFFs. PNGs are for quick viewing; use GeoTIFFs for GIS workflows and
+spatial metadata.
+
+## Adding data and retraining
+
+Add new, non-overwriting dated GeoTIFF scenes using the documented season
+tokens, preserve the common raster grid, optionally append independently
+reviewed labels to the pixel CSV, ingest them, and run
+`python -m src.trainer --mode both`. The append-only archive deduplicates
+identical raster bytes and retains versioned model candidates. See
+[SETUP_AND_RUN.md](SETUP_AND_RUN.md) for the complete procedure.

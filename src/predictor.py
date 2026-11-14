@@ -3,6 +3,9 @@ import json
 import os
 import numpy as np
 import rasterio
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 import tensorflow as tf
@@ -100,6 +103,18 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
     with rasterio.open(class_path, "w", **class_profile) as dst:
         dst.write(predicted_classes, 1)
 
+    # Portable PNG previews accompany the georeferenced GeoTIFF deliverables.
+    # Invalid raster cells remain transparent in all image products.
+    probability_png_path = os.path.join(output_dir, "next_season_water_probability.png")
+    extent_png_path = os.path.join(output_dir, "next_season_water_extent.png")
+    classes_png_path = os.path.join(output_dir, "next_season_relative_classes.png")
+    probability_image = np.ma.masked_invalid(water_probability)
+    extent_image = np.ma.masked_where(~valid_output, predicted_water.astype(np.uint8))
+    classes_image = np.ma.masked_where(~valid_output, predicted_classes)
+    plt.imsave(probability_png_path, probability_image, cmap="Blues", vmin=0.0, vmax=1.0)
+    plt.imsave(extent_png_path, extent_image, cmap="Blues", vmin=0, vmax=1)
+    plt.imsave(classes_png_path, classes_image, cmap="viridis", vmin=0, vmax=3)
+
     pixel_area_m2 = None
     with rasterio.open(second["path"]) as src:
         pixel_area_m2 = _pixel_area_m2(src, height, width)
@@ -110,6 +125,9 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
         "predicted_for": "next chronological seasonal period",
         "water_probability_path": probability_path,
         "relative_class_path": class_path,
+        "water_probability_png_path": probability_png_path,
+        "water_extent_png_path": extent_png_path,
+        "relative_class_png_path": classes_png_path,
         "water_pixels": water_pixels,
         "water_area_m2": area_m2,
         "water_area_km2": area_m2 / 1_000_000 if area_m2 is not None else None,

@@ -59,17 +59,24 @@ def _labels_from_csv(frame, shape, raster_valid):
     required = {"row", "column", "water", "depth_class"}
     if frame is None or frame.empty or not required.issubset(frame.columns):
         return None
-    rows = pd.to_numeric(frame["row"], errors="coerce").to_numpy()
-    cols = pd.to_numeric(frame["column"], errors="coerce").to_numpy()
-    water_values = pd.to_numeric(frame["water"], errors="coerce").to_numpy()
-    classes = pd.to_numeric(frame["depth_class"], errors="coerce").to_numpy()
-    good = np.isfinite(rows) & np.isfinite(cols) & np.isfinite(water_values) & np.isfinite(classes)
-    rows, cols = rows[good].astype(int), cols[good].astype(int)
+    rows = pd.to_numeric(frame["row"], errors="coerce").to_numpy(dtype=np.float64)
+    cols = pd.to_numeric(frame["column"], errors="coerce").to_numpy(dtype=np.float64)
+    water_values = pd.to_numeric(frame["water"], errors="coerce").to_numpy(dtype=np.float64)
+    classes = pd.to_numeric(frame["depth_class"], errors="coerce").to_numpy(dtype=np.float64)
+    good = (
+        np.isfinite(rows) & np.isfinite(cols)
+        & np.isfinite(water_values) & np.isfinite(classes)
+        & (rows == np.floor(rows)) & (cols == np.floor(cols))
+        & np.isin(water_values, [0, 1])
+        & (classes >= 0) & (classes <= 3)
+        & (classes == np.floor(classes))
+    )
+    rows, cols = rows[good].astype(np.int64), cols[good].astype(np.int64)
     water_values, classes = water_values[good].astype(np.uint8), classes[good].astype(np.uint8)
     inside = (rows >= 0) & (rows < shape[0]) & (cols >= 0) & (cols < shape[1])
     rows, cols = rows[inside], cols[inside]
     water_values, classes = water_values[inside], classes[inside]
-    if not len(rows) or np.any(water_values > 1) or np.any(classes > 3):
+    if not len(rows):
         return None
     if len(set(zip(rows.tolist(), cols.tolist()))) != len(rows):
         raise ValueError("Pixel CSV contains duplicate row/column records for one image.")

@@ -204,6 +204,20 @@ if current_tif and os.path.exists(current_tif):
                 for axis in axes:
                     axis.set_axis_off()
                 st.pyplot(fig)
+                st.markdown("### Prediction images")
+                image_col1, image_col2, image_col3 = st.columns(3)
+                with image_col1:
+                    st.image(result["water_probability_png_path"], caption="Predicted water probability", use_container_width=True)
+                    with open(result["water_probability_png_path"], "rb") as image_file:
+                        st.download_button("Download probability PNG", image_file.read(), file_name="next_season_water_probability.png", mime="image/png")
+                with image_col2:
+                    st.image(result["water_extent_png_path"], caption="Predicted water extent", use_container_width=True)
+                    with open(result["water_extent_png_path"], "rb") as image_file:
+                        st.download_button("Download water extent PNG", image_file.read(), file_name="next_season_water_extent.png", mime="image/png")
+                with image_col3:
+                    st.image(result["relative_class_png_path"], caption="Predicted relative NDWI classes", use_container_width=True)
+                    with open(result["relative_class_png_path"], "rb") as image_file:
+                        st.download_button("Download class map PNG", image_file.read(), file_name="next_season_relative_classes.png", mime="image/png")
                 st.download_button(
                     "Download water probability GeoTIFF",
                     data=open(result["water_probability_path"], "rb").read(),
