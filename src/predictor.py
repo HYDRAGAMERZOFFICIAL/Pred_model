@@ -66,6 +66,11 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
         raise FileNotFoundError(f"Training metadata not found: {metadata_path}.")
     with open(metadata_path, encoding="utf-8") as stream:
         metadata = json.load(stream)
+    if not metadata.get("deployment_eligible", False):
+        raise RuntimeError(
+            "The active model has not passed the persistence-baseline validation gate. "
+            "Train a new candidate and review its validation report before using it for forecasts."
+        )
     patch_size = int(metadata["patch_size"])
     scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
     if len(scenes) < 3:

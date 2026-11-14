@@ -74,6 +74,9 @@ jobs:
                   "label_sources": report.get("label_sources"),
                   "water_validation_metrics": report.get("water_validation_metrics"),
                   "relative_class_validation_metrics": report.get("relative_class_validation_metrics"),
+                  "persistence_baseline": report.get("persistence_baseline"),
+                  "deployment_eligibility": report.get("deployment_eligibility"),
+                  "deployment_eligible": report.get("deployment_eligible"),
                   "accuracy_interpretation": report.get("accuracy_interpretation"),
               }, indent=2))
           else:

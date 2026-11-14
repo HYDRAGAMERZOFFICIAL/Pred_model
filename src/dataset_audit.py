@@ -40,7 +40,10 @@ def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
     for path in raster_paths:
         try:
             with rasterio.open(path) as src:
-                valid = src.read_masks(1) > 0
+                values = src.read(1).astype(np.float32)
+                valid = (src.read_masks(1) > 0) & np.isfinite(values)
+                if src.nodata is not None:
+                    valid &= values != src.nodata
                 if src.crs is None:
                     report["errors"].append(f"{os.path.basename(path)} has no CRS.")
                 if src.count != 1:
@@ -66,6 +69,7 @@ def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
                     "dtype": src.dtypes[0],
                     "nodata": src.nodata,
                     "valid_pixels": int(valid.sum()),
+                    "masked_or_nonfinite_pixels": int(valid.size - valid.sum()),
                     "total_pixels": int(valid.size),
                     "valid_percent": float(valid.mean() * 100.0),
                 })

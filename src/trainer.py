@@ -15,7 +15,8 @@ from src.model import (
     build_multitask_unet, masked_water_bce, masked_class_crossentropy,
     masked_water_iou, masked_class_accuracy,
 )
-from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data
+from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data, _starts
+from src.model_validation import deployment_eligibility
 from src.knowledge_base import (
     ingest_scenes, archived_raster_paths, build_training_label_csv,
     register_model_version, promote_model_version, active_model_path,
@@ -46,6 +47,79 @@ def _segmentation_metrics(y_true, y_pred, valid_mask, class_count):
     metrics["macro_f1"] = float(np.mean([metrics[str(i)]["f1"] for i in range(class_count)]))
     return matrix.tolist(), metrics
 
+
+
+def _evaluate_scene_forecasts(model, scenes, validation_target_names, patch_size, stride):
+    """Compare mosaicked U-Net forecasts with persistence on identical valid pixels."""
+    scene_indices = {scene["name"]: index for index, scene in enumerate(scenes)}
+    collected = {
+        "water_truth": [], "water_prediction": [], "water_persistence": [],
+        "class_truth": [], "class_prediction": [], "class_persistence": [],
+    }
+    for target_name in validation_target_names:
+        if target_name not in scene_indices:
+            raise ValueError(f"Validation scene is missing from loaded temporal data: {target_name}")
+        target_index = scene_indices[target_name]
+        if target_index < 2:
+            raise ValueError(f"Validation target has no two-scene history: {target_name}")
+        first, previous, target = scenes[target_index - 2], scenes[target_index - 1], scenes[target_index]
+        height, width = target["image"].shape
+        water_sum = np.zeros((height, width), dtype=np.float64)
+        class_sum = np.zeros((height, width, 4), dtype=np.float64)
+        count = np.zeros((height, width), dtype=np.float32)
+        for row in _starts(height, patch_size, stride):
+            for col in _starts(width, patch_size, stride):
+                h = min(patch_size, height - row)
+                w = min(patch_size, width - col)
+                sl = np.s_[row:row + h, col:col + w]
+                x = np.zeros((1, patch_size, patch_size, 4), dtype=np.float32)
+                x[0, :h, :w, 0] = first["normalized"][sl]
+                x[0, :h, :w, 1] = previous["normalized"][sl]
+                x[0, :h, :w, 2] = first["valid"][sl].astype(np.float32)
+                x[0, :h, :w, 3] = previous["valid"][sl].astype(np.float32)
+                output = model.predict(x, verbose=0)
+                water_sum[sl] += output["water_probability"][0, :h, :w, 0]
+                class_sum[sl] += output["relative_class_probabilities"][0, :h, :w, :]
+                count[sl] += 1
+        valid = target["label_valid"] & previous["label_valid"] & (count > 0)
+        if not valid.any():
+            raise ValueError(f"No common valid validation pixels for {target_name}.")
+        water_prediction = (water_sum / np.maximum(count, 1) >= 0.5).astype(np.uint8)
+        class_prediction = np.argmax(class_sum / np.maximum(count[..., None], 1), axis=-1).astype(np.uint8)
+        collected["water_truth"].append(target["water"][valid])
+        collected["water_prediction"].append(water_prediction[valid])
+        collected["water_persistence"].append(previous["water"][valid])
+        collected["class_truth"].append(target["classes"][valid])
+        collected["class_prediction"].append(class_prediction[valid])
+        collected["class_persistence"].append(previous["classes"][valid])
+
+    all_values = {key: np.concatenate(value) for key, value in collected.items()}
+    all_valid = np.ones(len(all_values["water_truth"]), dtype=bool)
+    water_cm, water_metrics = _segmentation_metrics(
+        all_values["water_truth"], all_values["water_prediction"], all_valid, 2
+    )
+    class_cm, class_metrics = _segmentation_metrics(
+        all_values["class_truth"], all_values["class_prediction"], all_valid, 4
+    )
+    baseline_water_cm, baseline_water_metrics = _segmentation_metrics(
+        all_values["water_truth"], all_values["water_persistence"], all_valid, 2
+    )
+    baseline_class_cm, baseline_class_metrics = _segmentation_metrics(
+        all_values["class_truth"], all_values["class_persistence"], all_valid, 4
+    )
+    return {
+        "water_confusion_matrix": water_cm,
+        "water_metrics": water_metrics,
+        "class_confusion_matrix": class_cm,
+        "class_metrics": class_metrics,
+        "persistence_baseline": {
+            "water_confusion_matrix": baseline_water_cm,
+            "water_metrics": baseline_water_metrics,
+            "relative_class_confusion_matrix": baseline_class_cm,
+            "relative_class_metrics": baseline_class_metrics,
+            "description": "Copy the latest observed input scene's water and relative-class labels forward unchanged.",
+        },
+    }
 
 def _compile_loaded_model(model, learning_rate):
     model.compile(
@@ -125,6 +199,21 @@ def _train_candidate(
     class_valid = y_val["relative_class_probabilities"][..., 1] > 0.5
     class_prediction = np.argmax(predictions["relative_class_probabilities"], axis=-1)
     class_cm, class_metrics = _segmentation_metrics(class_truth, class_prediction, class_valid, 4)
+
+    # Evaluate full-scene mosaics against a simple persistence baseline. This
+    # catches models that train successfully but forecast worse than "no change".
+    scene_metrics = _evaluate_scene_forecasts(
+        model, scenes, data_report["target_scenes_validation"], patch_size, stride
+    )
+    water_cm = scene_metrics["water_confusion_matrix"]
+    water_metrics = scene_metrics["water_metrics"]
+    class_cm = scene_metrics["class_confusion_matrix"]
+    class_metrics = scene_metrics["class_metrics"]
+    baseline = scene_metrics["persistence_baseline"]
+    eligibility = deployment_eligibility(
+        water_metrics, class_metrics,
+        baseline["water_metrics"], baseline["relative_class_metrics"],
+    )
     val_losses = history.history.get("val_loss", [])
     report = dict(data_report)
     report.update({
@@ -134,6 +223,9 @@ def _train_candidate(
         "water_validation_metrics": water_metrics,
         "relative_class_validation_confusion_matrix": class_cm,
         "relative_class_validation_metrics": class_metrics,
+        "persistence_baseline": baseline,
+        "deployment_eligibility": eligibility,
+        "deployment_eligible": bool(eligibility["eligible"]),
         "model_path": final_path,
         "patch_size": patch_size,
         "stride": stride,
@@ -212,13 +304,24 @@ def train_and_save_model(
         report["versioned_model_path"] = version["model_path"]
         with open(version["report_path"], "w", encoding="utf-8") as stream:
             json.dump(report, stream, indent=2)
-        registered.append({"mode": candidate_mode, "model_path": version["model_path"],
-                           "report_path": version["report_path"], "validation_loss": report["best_validation_loss"]})
+        registered.append({
+            "mode": candidate_mode,
+            "model_path": version["model_path"],
+            "report_path": version["report_path"],
+            "validation_loss": report["best_validation_loss"],
+            "deployment_eligible": bool(report.get("deployment_eligible", False)),
+            "water_macro_f1": report["water_validation_metrics"]["macro_f1"],
+            "relative_class_macro_f1": report["relative_class_validation_metrics"]["macro_f1"],
+            "persistence_water_macro_f1": baseline["water_metrics"]["macro_f1"],
+            "persistence_class_macro_f1": baseline["relative_class_metrics"]["macro_f1"],
+        })
 
     comparable = [item for item in registered if item["validation_loss"] is not None and np.isfinite(item["validation_loss"])]
     if not comparable:
         raise RuntimeError("No candidate produced a finite validation loss; no model was promoted.")
     best = min(comparable, key=lambda item: item["validation_loss"])
+    eligible_candidates = [item for item in comparable if item["deployment_eligible"]]
+    promotion_candidate = min(eligible_candidates, key=lambda item: item["validation_loss"]) if eligible_candidates else None
     # Re-evaluate the existing active model on this run's exact validation scenes.
     # Comparing with a historical report would be invalid because the holdout can
     # change whenever new chronological scenes are ingested.
@@ -244,20 +347,32 @@ def train_and_save_model(
             print(f"WARNING: Existing active model could not be evaluated on this holdout; promotion is disabled: {exc}")
 
     promoted = (
-        not (previous_model and os.path.isfile(previous_model))
-        or (
-            active_baseline_loss is not None
-            and best["validation_loss"] <= active_baseline_loss
+        promotion_candidate is not None
+        and (
+            not (previous_model and os.path.isfile(previous_model))
+            or (
+                active_baseline_loss is not None
+                and promotion_candidate["validation_loss"] <= active_baseline_loss
+            )
         )
     )
     if promoted:
-        promote_model_version(best["model_path"], best["report_path"], output_dir)
+        promote_model_version(
+            promotion_candidate["model_path"], promotion_candidate["report_path"], output_dir
+        )
     result = {
         "run_id": run_id,
         "archive_scene_count": len(raster_paths),
         "candidates": registered,
         "selected_candidate": best["mode"],
         "selected_validation_loss": best["validation_loss"],
+        "promotion_candidate": promotion_candidate["mode"] if promotion_candidate else None,
+        "promotion_block_reason": (
+            None if promoted else
+            "No candidate matched or exceeded the persistence baseline on both validation tasks."
+            if promotion_candidate is None else
+            "Candidate did not beat the current active model on the same validation holdout."
+        ),
         "previous_active_validation_loss_on_current_holdout": active_baseline_loss,
         "promoted_to_active": promoted,
         "active_model": active_model_path(output_dir),

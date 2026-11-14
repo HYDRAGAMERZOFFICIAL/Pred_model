@@ -163,3 +163,15 @@ before training. It checks GeoTIFF metadata and grid consistency, missing
 seasonal periods, label coverage, pseudo-label fallbacks and consecutive
 training windows. Resolve errors and review warnings in
 `dataset_audit_report.json` before launching a long training run.
+
+
+## Forecast quality gate
+
+Every training candidate is evaluated as a full-scene mosaic on the same
+chronological validation scenes as a persistence baseline (copy the latest
+observed water mask and relative classes forward). A candidate is eligible for
+promotion only when its macro-F1 is no worse than persistence on both tasks.
+The active-model comparison is then performed on the same validation holdout.
+A candidate that trains successfully but fails this gate remains versioned for
+inspection and is not promoted for prediction. The predictor refuses to serve
+an active model whose report does not record a passed quality gate.
