@@ -1,165 +1,162 @@
-import os
+"""Geospatial utilities for NDWI water-extent analysis.
+
+NDWI supports water detection/extent analysis, not bathymetric measurement.
+Physical depth and volume are only reported when measured depth data is supplied.
+"""
+from __future__ import annotations
 import glob
+import os
 import numpy as np
 import rasterio
 from skimage.filters import threshold_otsu
-from scipy import ndimage
-import warnings
-warnings.filterwarnings('ignore')
+
 
 class LakeDataProcessor:
-    """Process multi-temporal NDWI GeoTIFF data for lake water analysis"""
-
-    def __init__(self, data_dir='.'):
+    """Load, validate and summarize multi-temporal NDWI GeoTIFFs."""
+    def __init__(self, data_dir="."):
         self.data_dir = data_dir
-        self.tif_files = sorted(glob.glob(os.path.join(data_dir, '*.tif')))
+        self.tif_files = sorted(
+            p for p in glob.glob(os.path.join(data_dir, "*.tif"))
+            if os.path.isfile(p) and not os.path.basename(p).startswith(".")
+        )
+
+    @staticmethod
+    def _valid_mask(src, arr):
+        valid = (src.read_masks(1) > 0) & np.isfinite(arr)
+        if src.nodata is not None:
+            valid &= arr != src.nodata
+        return valid
 
     def load_tif(self, file_path):
-        """Load GeoTIFF and extract metadata"""
+        """Read a raster and calculate representative pixel area in square metres."""
         with rasterio.open(file_path) as src:
-            arr = src.read(1).astype(np.float32)
-            # Get pixel size in degrees
-            transform = src.transform
-            pixel_width_deg = abs(transform[0])  # longitude spacing
-            pixel_height_deg = abs(transform[4])  # latitude spacing
+            raw = src.read(1).astype(np.float32)
+            arr = raw.copy()
+            arr[~self._valid_mask(src, raw)] = np.nan
+            crs, transform = src.crs, src.transform
+            if crs is None:
+                raise ValueError(f"{file_path} has no CRS; pixel area is unknown.")
+            if crs.is_projected:
+                axes = crs.axis_info[:2]
+                fx = axes[0].unit_conversion_factor if axes else 1.0
+                fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
+                pixel_area = abs(transform.a * transform.e - transform.b * transform.d) * fx * fy
+            elif crs.is_geographic:
+                geod = crs.get_geod()
+                row, col = src.height // 2, src.width // 2
+                corners = [
+                    rasterio.transform.xy(transform, row, col, offset="ul"),
+                    rasterio.transform.xy(transform, row, col, offset="ur"),
+                    rasterio.transform.xy(transform, row, col, offset="lr"),
+                    rasterio.transform.xy(transform, row, col, offset="ll"),
+                ]
+                lons, lats = zip(*corners)
+                area, _ = geod.polygon_area_perimeter(lons, lats)
+                pixel_area = abs(float(area))
+            else:
+                raise ValueError(f"Unsupported CRS type: {crs}")
+        return arr, float(pixel_area), crs
 
-            # Convert degrees to meters (approximate at equator: 1 deg ~ 111.32 km)
-            pixel_area_m2 = (pixel_width_deg * 111320) * (pixel_height_deg * 111320)
+    @staticmethod
+    def compute_otsu_threshold(arr):
+        """Apply Otsu to finite values; invalid pixels are never classified as water."""
+        valid = np.isfinite(arr)
+        values = arr[valid]
+        if values.size == 0:
+            return 0.0, np.zeros(arr.shape, dtype=bool), 0, 0
+        threshold = float(values[0]) if np.ptp(values) <= np.finfo(np.float32).eps else float(threshold_otsu(values))
+        water = valid & (arr >= threshold)
+        return threshold, water, int(water.sum()), int(valid.sum())
 
-            nodata = src.nodata
-            crs = src.crs
+    @staticmethod
+    def compute_depth_map(arr, binary_water):
+        """Relative NDWI rank classes; these values are not physical depth."""
+        result = np.zeros(arr.shape, dtype=np.uint8)
+        water_values = arr[binary_water & np.isfinite(arr)]
+        if water_values.size == 0:
+            return result
+        if water_values.size < 3:
+            result[binary_water] = 2
+            return result
+        p33, p67 = np.percentile(water_values, [33.3, 66.6])
+        result[binary_water & (arr <= p33)] = 1
+        result[binary_water & (arr > p33) & (arr <= p67)] = 2
+        result[binary_water & (arr > p67)] = 3
+        return result
 
-        # Handle nodata
-        if nodata is not None:
-            arr[arr == nodata] = np.nan
-
-        return arr, pixel_area_m2, crs
-
-    def compute_otsu_threshold(self, arr):
-        """Calculate Otsu threshold for water detection"""
-        valid_mask = ~np.isnan(arr)
-        valid_data = arr[valid_mask]
-
-        if len(valid_data) == 0:
-            return 0.0, np.zeros_like(arr, dtype=bool), 0, 0
-
-        # Normalize to 0-255 for Otsu
-        min_val, max_val = np.percentile(valid_data, [0.5, 99.5])
-        normalized = np.clip((valid_data - min_val) / (max_val - min_val + 1e-8), 0, 1)
-        normalized_8bit = (normalized * 255).astype(np.uint8)
-
-        thresh_norm = threshold_otsu(normalized_8bit)
-        thresh_original = min_val + (thresh_norm / 255.0) * (max_val - min_val)
-
-        binary_water = (arr >= thresh_original) & valid_mask
-        water_pixels = np.sum(binary_water)
-        total_valid = np.sum(valid_mask)
-
-        return float(thresh_original), binary_water, int(water_pixels), int(total_valid)
-
-    def compute_depth_map(self, arr, binary_water):
-        """Create depth classification: 0=land, 1=shallow, 2=moderate, 3=deep"""
-        depth_map = np.zeros(arr.shape, dtype=np.uint8)
-
-        if not np.any(binary_water):
-            return depth_map
-
-        water_vals = arr[binary_water]
-
-        if len(water_vals) < 3:
-            depth_map[binary_water] = 2
-            return depth_map
-
-        # Percentile-based depth classification
-        p33, p67 = np.percentile(water_vals, [33.3, 66.6])
-
-        depth_map[binary_water & (arr <= p33)] = 1  # shallow
-        depth_map[binary_water & (arr > p33) & (arr <= p67)] = 2  # moderate
-        depth_map[binary_water & (arr > p67)] = 3  # deep
-
-        return depth_map
-
-    def compute_water_metrics(self, arr, binary_water, pixel_area_m2):
-        """Calculate water area and volume"""
-        water_pixels = np.sum(binary_water)
-        water_area_m2 = water_pixels * pixel_area_m2
-        water_area_km2 = water_area_m2 / 1e6
-
-        # Estimate depth from NDWI values (heuristic)
-        if np.any(binary_water):
-            water_vals = arr[binary_water]
-            # Map NDWI to approximate depth (0.3-0.8 NDWI = 0.5-3m)
-            avg_ndwi = np.mean(water_vals)
-            estimated_depth_m = 0.5 + (avg_ndwi - 0.3) * 5 / 0.5
-            estimated_depth_m = np.clip(estimated_depth_m, 0.5, 3.0)
-        else:
-            estimated_depth_m = 1.5
-
-        water_volume_m3 = water_area_m2 * estimated_depth_m
-
-        return {
-            'area_m2': water_area_m2,
-            'area_km2': water_area_km2,
-            'volume_m3': water_volume_m3,
-            'avg_depth_m': estimated_depth_m,
-            'water_pixels': water_pixels
+    @staticmethod
+    def compute_water_metrics(arr, binary_water, pixel_area_m2, measured_depth_m=None):
+        """Calculate water area and only calculate volume from measured depths."""
+        water = np.asarray(binary_water, dtype=bool) & np.isfinite(arr)
+        count = int(water.sum())
+        area = float(count * pixel_area_m2)
+        result = {
+            "area_m2": area, "area_km2": area / 1_000_000.0,
+            "water_pixels": count, "avg_depth_m": None, "volume_m3": None,
+            "depth_source": "Unavailable: NDWI is not a depth measurement",
         }
+        if measured_depth_m is not None:
+            depth = np.asarray(measured_depth_m, dtype=np.float64)
+            if depth.shape != arr.shape:
+                raise ValueError("Measured depth raster must match the NDWI grid.")
+            usable = water & np.isfinite(depth) & (depth >= 0)
+            if usable.any():
+                result["avg_depth_m"] = float(depth[usable].mean())
+                result["volume_m3"] = float(depth[usable].sum() * pixel_area_m2)
+                result["depth_source"] = "Measured depth raster"
+        return result
 
-    def create_training_patches(self, patch_size=128, stride=64):
-        """Extract patches from all TIF files for model training"""
-        X_patches = []
-        y_patches = []
+    def create_training_patches(self, patch_size=128, stride=64, label_dir=None):
+        """Extract patches only from independent, aligned ground-truth masks.
 
-        for tif_file in self.tif_files:
-            print(f"Processing: {os.path.basename(tif_file)}")
-            arr, pixel_area_m2, _ = self.load_tif(tif_file)
-
-            # Normalize NDWI to [0, 1]
-            valid_mask = ~np.isnan(arr)
-            if not np.any(valid_mask):
+        Label naming: <source-stem>_mask.tif. Values are 0=land and 1=water.
+        No Otsu pseudo-labels and no random fallback samples are generated.
+        """
+        if patch_size <= 0 or stride <= 0:
+            raise ValueError("patch_size and stride must be positive.")
+        label_dir = label_dir or os.path.join(self.data_dir, "labels")
+        xs, ys = [], []
+        for image_path in self.tif_files:
+            stem = os.path.splitext(os.path.basename(image_path))[0]
+            label_path = os.path.join(label_dir, f"{stem}_mask.tif")
+            if not os.path.exists(label_path):
                 continue
-
-            arr_norm = np.nan_to_num(arr)
-            arr_min, arr_max = np.percentile(arr_norm[valid_mask], [2, 98])
-            arr_norm = np.clip((arr_norm - arr_min) / (arr_max - arr_min + 1e-8), 0, 1)
-
-            # Get binary water mask
-            _, binary_water, _, _ = self.compute_otsu_threshold(arr)
-            y_binary = binary_water.astype(np.uint8)
-
-            # Extract patches
-            h, w = arr_norm.shape
-            for y in range(0, h - patch_size + 1, stride):
-                for x in range(0, w - patch_size + 1, stride):
-                    x_patch = arr_norm[y:y+patch_size, x:x+patch_size]
-                    y_patch = y_binary[y:y+patch_size, x:x+patch_size]
-
-                    # Only include patches with some variance
-                    if np.std(x_patch) > 0.01:
-                        X_patches.append(x_patch)
-                        y_patches.append(y_patch)
-
-        X = np.array(X_patches, dtype=np.float32)
-        y = np.array(y_patches, dtype=np.float32)
-
-        print(f"Created {len(X)} training patches")
-        return X, y
+            with rasterio.open(image_path) as img, rasterio.open(label_path) as lab:
+                if img.shape != lab.shape or img.transform != lab.transform or img.crs != lab.crs:
+                    raise ValueError(f"Label grid does not match image grid: {label_path}")
+                image = img.read(1).astype(np.float32)
+                label = lab.read(1)
+                valid = self._valid_mask(img, image) & (lab.read_masks(1) > 0)
+                if not np.isin(np.unique(label[valid]), [0, 1]).all():
+                    raise ValueError(f"Labels in {label_path} must use 0=land and 1=water.")
+                values = image[valid]
+                if not values.size:
+                    continue
+                lo, hi = np.percentile(values, [2, 98])
+                norm = np.clip((image - lo) / max(float(hi - lo), 1e-8), 0, 1)
+                norm[~valid] = 0
+                for row in range(0, image.shape[0] - patch_size + 1, stride):
+                    for col in range(0, image.shape[1] - patch_size + 1, stride):
+                        sl = np.s_[row:row + patch_size, col:col + patch_size]
+                        if valid[sl].mean() < 0.98:
+                            continue
+                        xs.append(norm[sl][..., None])
+                        ys.append(label[sl].astype(np.float32)[..., None])
+        if not xs:
+            empty = np.empty((0, patch_size, patch_size, 1), np.float32)
+            return empty, empty.copy()
+        return np.stack(xs), np.stack(ys)
 
     def get_all_tif_info(self):
-        """Return info about all available TIF files"""
         info = []
-        for tif_file in self.tif_files:
-            arr, pixel_area_m2, crs = self.load_tif(tif_file)
-            thresh, binary_water, water_pixels, total_valid = self.compute_otsu_threshold(arr)
-
+        for path in self.tif_files:
+            arr, area, crs = self.load_tif(path)
+            threshold, water, count, total = self.compute_otsu_threshold(arr)
             info.append({
-                'filename': os.path.basename(tif_file),
-                'shape': arr.shape,
-                'pixel_area_m2': pixel_area_m2,
-                'otsu_threshold': thresh,
-                'water_pixels': water_pixels,
-                'total_pixels': total_valid,
-                'water_percentage': (water_pixels / total_valid * 100) if total_valid > 0 else 0
+                "filename": os.path.basename(path), "shape": arr.shape,
+                "pixel_area_m2": area, "crs": str(crs),
+                "otsu_threshold": threshold, "water_pixels": count,
+                "total_pixels": total,
+                "water_percentage": count / total * 100 if total else 0.0,
             })
-
         return info
