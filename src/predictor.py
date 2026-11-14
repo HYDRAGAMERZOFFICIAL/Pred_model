@@ -3,9 +3,7 @@ import json
 import os
 import numpy as np
 import rasterio
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+from matplotlib import image as mpimg
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 import tensorflow as tf
@@ -111,7 +109,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
     probability_image = np.ma.masked_invalid(water_probability)
     extent_image = np.ma.masked_where(~valid_output, predicted_water.astype(np.uint8))
     classes_image = np.ma.masked_where(~valid_output, predicted_classes)
-    plt.imsave(probability_png_path, probability_image, cmap="Blues", vmin=0.0, vmax=1.0)
+    mpimg.imsave(probability_png_path, probability_image, cmap="Blues", vmin=0.0, vmax=1.0)
     plt.imsave(extent_png_path, extent_image, cmap="Blues", vmin=0, vmax=1)
     plt.imsave(classes_png_path, classes_image, cmap="viridis", vmin=0, vmax=3)
 
