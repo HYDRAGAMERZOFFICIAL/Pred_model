@@ -88,7 +88,7 @@ NDWI_JAN_APR_2023.tif
 
 Use one scene per lake/year/season in the current time series. Keep acquisition date, sensor, index formula, processing level, and cloud-mask details in a separate metadata log.
 
-### 3.3 Optional pixel-label CSV
+### 3.3 Pixel-label CSV (primary supervision)
 
 If you have pixel labels, the CSV must contain:
 
@@ -105,13 +105,13 @@ NDWI_JAN_APR_2022.tif,0,1,1,1
 - Consistency rule: water == (depth_class > 0).
 - Do not include fractional coordinates, duplicate pixel coordinates, or invalid/missing class values.
 
-These are **relative NDWI classes, not measured depth in metres**. If the CSV is absent or covers less than 95% of a scene's valid pixels, that scene uses documented Otsu/quantile pseudo-labels. The report records the source. A model trained on generated labels learns to imitate those labels; this alone does not establish real-world accuracy.
+These are **relative NDWI classes, not measured depth in metres**. The repository's current CSV contains 87,901 labelled rows across 11 scenes (7,991 rows per scene), so it is sparse pixel supervision rather than a complete mask. The U-Net now uses every valid CSV-labelled pixel and masks unlabelled pixels out of the loss. It does not discard the CSV merely because coverage is below 95%. Otsu/quantile pseudo-labels are used only for a scene with no usable CSV labels. These labels are algorithm-derived unless independently reviewed; agreement with them is not independent real-world accuracy.
 
 ## 4. First training run
 
 ### 4.1 Place the inputs
 
-Put all first-run NDWI GeoTIFFs in the project root next to app.py. Put the optional label CSV there too, named NDWI_pixel_depth_dataset.csv. Keep untouched copies of the original rasters and CSV outside the repository.
+Put all first-run NDWI GeoTIFFs in the project root next to app.py. Put the existing label CSV there too, named NDWI_pixel_depth_dataset.csv. Keep its existing rows and append new image labels to it as new scenes arrive. Keep untouched copies of the original rasters and CSV outside the repository.
 
 ### 4.2 Audit before training
 
@@ -125,7 +125,7 @@ Open dataset_audit_report.json. Confirm:
 - all scenes share dimensions, CRS, and transform;
 - missing_seasonal_periods and warnings are understood;
 - CSV coverage is plausible;
-- label_sources shows whether supplied CSV labels or pseudo-label fallbacks will be used.
+- label_sources and csv_coverage_by_scene show which scenes use supplied CSV labels, their coverage, and which scenes (if any) require pseudo-label fallback.
 
 A missing seasonal scene interrupts temporal windows. The trainer skips windows across missing four-month periods; it does not invent an image. With the default two validation sequences, at least three valid consecutive three-scene windows are needed (five fully consecutive scenes is a practical minimum). If there are too few windows, add missing dates or consciously revise the validation setup.
 
@@ -171,7 +171,7 @@ If no candidate passes:
 
 ### 5.2 Copy new files and update labels
 
-Copy only the new NDWI GeoTIFFs into the project root. If new pixel labels are available, append rows to the existing CSV using the exact filename and schema above. Preserve old rows. When an identical archived raster is re-ingested, new label rows are merged by row/column, keeping the latest row for that pixel.
+Copy only the new NDWI GeoTIFFs into the project root. Append new pixel-label rows to the same CSV using the exact new GeoTIFF filename and schema above. Preserve all old rows; do not replace the dataset with only the newest batch. When an identical archived raster is re-ingested, new label rows are merged by row/column, keeping the latest row for that pixel.
 
 ### 5.3 Audit the expanded dataset
 
@@ -179,7 +179,7 @@ Copy only the new NDWI GeoTIFFs into the project root. If new pixel labels are a
 .\.venv\Scripts\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
 ~~~
 
-Do not proceed if there are errors. Investigate warnings about missing seasons, grid mismatch, pseudo-label fallback, and low label coverage.
+Do not proceed if there are errors. Investigate warnings about missing seasons, grid mismatch, and scenes with no CSV labels. Partial CSV coverage is expected for the supplied sparse-pixel dataset; those unlabelled pixels are excluded from supervised loss.
 
 ### 5.4 Ingest the new scenes
 
@@ -211,7 +211,7 @@ Open the newest knowledge_base/runs/<run-id>/run_summary.json and candidate repo
 - archive_scene_count increased as expected;
 - the new scenes appear in archive/manifest.json;
 - training and validation sequence counts are nonzero;
-- label sources and CSV coverage are sensible;
+- label sources and CSV coverage are sensible; partial CSV labels should be retained and unlabelled pixels masked;
 - model and persistence metrics are present;
 - promoted_to_active accurately reflects the quality gate;
 - active model files changed only if promotion succeeded.
