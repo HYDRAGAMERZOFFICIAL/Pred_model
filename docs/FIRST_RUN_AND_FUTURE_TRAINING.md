@@ -179,7 +179,7 @@ Copy only the new NDWI GeoTIFFs into the project root. Append new pixel-label ro
 .\.venv\Scripts\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
 ~~~
 
-Do not proceed if there are errors. Investigate warnings about missing seasons, grid mismatch, and scenes with no CSV labels. Partial CSV coverage is expected for the supplied sparse-pixel dataset; those unlabelled pixels are excluded from supervised loss.
+Do not proceed if there are errors. Investigate warnings about missing seasons, grid mismatch, and scenes with no CSV labels. The current CSV covers all valid pixels in each scene; if future CSVs contain partial labels, unlabelled pixels are excluded from supervised loss.
 
 ### 5.4 Ingest the new scenes
 
