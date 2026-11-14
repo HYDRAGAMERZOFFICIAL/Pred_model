@@ -46,7 +46,7 @@ python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --
 
 The trainer creates a chronological validation holdout by target scene before
 patch extraction, applies eight-way rotations/reflections to training patches only,
-and derives class-loss weights from the training split. It saves:
+and derives class-balanced loss weights for both water and relative-class heads from the training split. It saves:
 
 - knowledge_base/ndwi_multitask_unet.keras
 - knowledge_base/ndwi_multitask_best.keras
