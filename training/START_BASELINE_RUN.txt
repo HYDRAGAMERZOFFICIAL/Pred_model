@@ -1,2 +1,4 @@
 Initial baseline training trigger for the NDWI temporal U-Net.
 This file is watched by .github/workflows/train-model.yml. Edit it to start another push-triggered baseline run, or use the workflow_dispatch button.
+
+Second training run: validate full-scene mosaics against persistence and enforce deployment eligibility.
