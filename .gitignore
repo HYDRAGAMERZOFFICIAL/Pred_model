@@ -23,3 +23,57 @@ knowledge_base/models/
 knowledge_base/runs/
 knowledge_base/*.keras
 knowledge_base/*.json
+
+# Python environments
+venv/
+.venv/
+.venv-dml/
+.venv-ov/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Model files and checkpoints
+*.keras
+*.h5
+*.hdf5
+*.ckpt
+*.weights.h5
+*.onnx
+*.xml
+*.bin
+
+# TensorFlow and ML temporary files
+logs/
+runs/
+checkpoints/
+tensorboard/
+*.log
+
+# Large datasets and geospatial files
+*.tif
+*.tiff
+*.csv
+*.npy
+*.npz
+*.parquet
+
+# Generated knowledgebase
+knowledge_base/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
