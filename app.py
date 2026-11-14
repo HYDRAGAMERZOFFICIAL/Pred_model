@@ -225,6 +225,38 @@ if current_tif and os.path.exists(current_tif):
             )
             st.caption("Training uses the generated pixel CSV where scene coverage is sufficient. Missing scene labels are derived from the documented Otsu/quantile procedure and recorded in the report.")
 
+        report_path = os.path.join("knowledge_base", "multitask_training_report.json")
+        if os.path.isfile(report_path):
+            with st.expander("Model validation metrics and confusion matrices", expanded=False):
+                with open(report_path, encoding="utf-8") as report_file:
+                    training_report = json.load(report_file)
+                st.caption("These scores compare predictions with the generated Otsu/quantile labels in the chronological holdout. They are not independent field-validated accuracy.")
+                water_metrics = training_report.get("water_validation_metrics", {})
+                class_metrics = training_report.get("relative_class_validation_metrics", {})
+                if water_metrics:
+                    st.markdown("**Water / non-water validation metrics**")
+                    st.json(water_metrics)
+                    st.write("Confusion matrix (rows = actual, columns = predicted)")
+                    st.dataframe(pd.DataFrame(
+                        training_report.get("water_validation_confusion_matrix", []),
+                        index=["Actual non-water", "Actual water"],
+                        columns=["Predicted non-water", "Predicted water"],
+                    ), use_container_width=True)
+                if class_metrics:
+                    st.markdown("**Relative NDWI class validation metrics**")
+                    class_table = pd.DataFrame([
+                        {"Class": name, **values}
+                        for name, values in class_metrics.items()
+                        if name.isdigit()
+                    ]).replace({"Class": {"0": "Non-water", "1": "Shallow", "2": "Moderate", "3": "Deep"}})
+                    st.dataframe(class_table, use_container_width=True, hide_index=True)
+                    st.write("Confusion matrix (rows = actual, columns = predicted)")
+                    st.dataframe(pd.DataFrame(
+                        training_report.get("relative_class_validation_confusion_matrix", []),
+                        index=["Actual non-water", "Actual shallow", "Actual moderate", "Actual deep"],
+                        columns=["Predicted non-water", "Predicted shallow", "Predicted moderate", "Predicted deep"],
+                    ), use_container_width=True)
+
         st.divider()
         st.markdown("### 2. Annual water-area projection")
         try:

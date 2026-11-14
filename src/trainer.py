@@ -10,6 +10,32 @@ from src.model import build_multitask_unet
 from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data
 
 
+def _segmentation_metrics(y_true, y_pred, valid_mask, class_count):
+    """Compute confusion matrix and per-class metrics over valid pixels only."""
+    truth = np.asarray(y_true)[valid_mask].astype(np.int64)
+    prediction = np.asarray(y_pred)[valid_mask].astype(np.int64)
+    matrix = np.zeros((class_count, class_count), dtype=np.int64)
+    if truth.size:
+        np.add.at(matrix, (truth, prediction), 1)
+    metrics = {}
+    for class_id in range(class_count):
+        tp = int(matrix[class_id, class_id])
+        fp = int(matrix[:, class_id].sum() - tp)
+        fn = int(matrix[class_id, :].sum() - tp)
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        iou = tp / (tp + fp + fn) if tp + fp + fn else 0.0
+        metrics[str(class_id)] = {
+            "precision": float(precision), "recall": float(recall),
+            "f1": float(f1), "iou": float(iou), "support": int(matrix[class_id].sum()),
+        }
+    total = int(matrix.sum())
+    metrics["overall_accuracy"] = float(np.trace(matrix) / total) if total else 0.0
+    metrics["macro_f1"] = float(np.mean([metrics[str(i)]["f1"] for i in range(class_count)]))
+    return matrix.tolist(), metrics
+
+
 def train_and_save_model(
     data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
@@ -42,8 +68,29 @@ def train_and_save_model(
     )
     model_path = os.path.join(output_dir, "ndwi_multitask_unet.keras")
     model.save(model_path)
+
+    # Evaluate both heads against the held-out generated labels. These are
+    # agreement metrics for pseudo-labels, not independent field accuracy.
+    predictions = model.predict(x_val, batch_size=batch_size, verbose=0)
+    water_truth = y_val["water_probability"][..., 0]
+    water_valid = y_val["water_probability"][..., 1] > 0.5
+    water_prediction = (predictions["water_probability"][..., 0] >= 0.5).astype(np.uint8)
+    water_cm, water_metrics = _segmentation_metrics(
+        water_truth, water_prediction, water_valid, 2
+    )
+
+    class_truth = y_val["relative_class_probabilities"][..., 0]
+    class_valid = y_val["relative_class_probabilities"][..., 1] > 0.5
+    class_prediction = np.argmax(predictions["relative_class_probabilities"], axis=-1)
+    class_cm, class_metrics = _segmentation_metrics(
+        class_truth, class_prediction, class_valid, 4
+    )
     report.update({
         "model": "NDWI_MultiTask_Temporal_UNet",
+        "water_validation_confusion_matrix": water_cm,
+        "water_validation_metrics": water_metrics,
+        "relative_class_validation_confusion_matrix": class_cm,
+        "relative_class_validation_metrics": class_metrics,
         "model_path": model_path,
         "patch_size": patch_size,
         "stride": stride,
