@@ -7,10 +7,21 @@ import rasterio
 from matplotlib import image as mpimg
 from rasterio.transform import from_origin
 
-from src.predictor import _pixel_area_m2, _save_prediction_previews
+from src.predictor import _pixel_area_m2, _save_prediction_previews, predict_next_season
 
 
 class TestPredictorPixelArea(unittest.TestCase):
+    def test_predictor_blocks_model_without_quality_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = os.path.join(tmp, "models")
+            os.makedirs(model_dir)
+            with open(os.path.join(model_dir, "ndwi_multitask_unet.keras"), "wb") as stream:
+                stream.write(b"placeholder")
+            with open(os.path.join(model_dir, "multitask_training_report.json"), "w", encoding="utf-8") as stream:
+                stream.write('{"patch_size": 64, "deployment_eligible": false}')
+            with self.assertRaisesRegex(RuntimeError, "persistence-baseline"):
+                predict_next_season(data_dir=tmp, model_dir=model_dir, output_dir=os.path.join(tmp, "out"))
+
     def test_prediction_png_previews_are_written_and_keep_raster_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
             valid = np.array([[True, True], [False, True]])

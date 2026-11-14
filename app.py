@@ -169,7 +169,12 @@ if current_tif and os.path.exists(current_tif):
 
         st.markdown("### 1. Next seasonal spatial forecast")
         model_path = os.path.join("knowledge_base", "ndwi_multitask_unet.keras")
-        if os.path.isfile(model_path):
+        model_report_path = os.path.join("knowledge_base", "multitask_training_report.json")
+        model_is_eligible = False
+        if os.path.isfile(model_report_path):
+            with open(model_report_path, encoding="utf-8") as model_report_file:
+                model_is_eligible = bool(json.load(model_report_file).get("deployment_eligible", False))
+        if os.path.isfile(model_path) and model_is_eligible:
             if st.button("Generate next-season prediction", type="primary", key="run_seasonal_forecast"):
                 try:
                     with st.spinner("Running temporal U-Net over the latest two NDWI scenes..."):
@@ -233,12 +238,16 @@ if current_tif and os.path.exists(current_tif):
             else:
                 st.info("The model is available. Generate a forecast to create georeferenced GeoTIFF outputs.")
         else:
-            st.warning("The multi-task model has not been trained in this environment yet.")
-            st.code(
-                "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
-                language="bash",
-            )
-            st.caption("Training uses the generated pixel CSV where scene coverage is sufficient. Missing scene labels are derived from the documented Otsu/quantile procedure and recorded in the report.")
+            if os.path.isfile(model_path):
+                st.warning("A model file exists, but it has not passed the persistence-baseline quality gate.")
+                st.caption("Forecast generation is disabled until a candidate matches or beats the latest-scene persistence baseline on both water extent and relative-class macro-F1.")
+            else:
+                st.warning("The multi-task model has not been trained in this environment yet.")
+                st.code(
+                    "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
+                    language="bash",
+                )
+                st.caption("Training uses the generated pixel CSV where scene coverage is sufficient. Missing scene labels are derived from the documented Otsu/quantile procedure and recorded in the report.")
 
         report_path = os.path.join("knowledge_base", "multitask_training_report.json")
         if os.path.isfile(report_path):
