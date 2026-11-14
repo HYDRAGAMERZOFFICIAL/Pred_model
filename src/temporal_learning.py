@@ -1,8 +1,8 @@
-"""Temporal raster dataset builder for the multi-task NDWI U-Net.
+"""Temporal NDWI/multispectral dataset builder for the multi-task CNN U-Net.
 
-Targets come from the user's generated pixel CSV when available. Missing CSV
-coverage falls back to the documented Otsu + NDWI-quantile pseudo-label method.
-These labels are algorithm-derived, not independent ground truth.
+Supplied CSV pixel labels are primary supervision. Unlabelled pixels are
+masked; Otsu/quantile pseudo-labels are only a fallback when a scene has no
+usable CSV labels. All splits are chronological at target-scene level.
 """
 from __future__ import annotations
 
