@@ -1,50 +1,66 @@
 # Data and model protocol
 
-## What the current inputs support
+## Source data
 
-NDWI/MNDWI scenes support water-extent classification, surface-area time
-series and change detection when scenes are geospatially aligned and comparable.
-An NDWI value is not a measurement of water-column depth. Percentile-derived
-classes are **relative NDWI classes**, not metres, bathymetry or validated depth.
+The project starts with NDWI GeoTIFFs exported from QGIS. Preserve the original
+scene date, sensor, QGIS processing steps, band/index definition, scale/offset,
+cloud mask, CRS, resolution and affine transform alongside each export. The
+current Python pipeline does not recreate the upstream QGIS calculation.
 
-Physical volume requires bathymetric/depth rasters or field measurements with
-units, vertical datum, acquisition date and known spatial alignment. Compute
-volume by summing valid depth values multiplied by ground area per pixel.
+## Multi-task targets
 
-## Supervised segmentation
+The temporal U-Net has a shared encoder/decoder and two heads:
 
-Place independent reference masks under `labels/`. For
-`NDWI_JAN_APR_22.tif`, provide `labels/NDWI_JAN_APR_22_mask.tif`.
-The label raster must match image dimensions, transform and CRS and use
-0=land, 1=water. Reference masks should be manually digitized, field-verified,
-or sourced from an independently reviewed reference product—not Otsu on the
-same NDWI raster.
+1. water_probability: binary water-extent probability;
+2. relative_class_probabilities: four-class softmax output (0 non-water,
+   1 shallow, 2 moderate, 3 deep).
 
-A proper evaluation split must be by acquisition scene/date and ideally by
-lake/site. Randomly splitting neighbouring patches from a single scene leaks
-spatial information. Report precision, recall, F1/Dice and IoU on unseen
-scenes. Pixel accuracy alone may conceal poor water-boundary performance.
+The generated pixel CSV is reconstructed into raster-shaped targets using
+image, row, column, water and depth_class. If the CSV is absent or covers less
+than 95% of a scene's valid pixels, labels are generated from Otsu and the
+per-scene 33.33/66.67 percentile boundaries. Provenance is written to the
+training report.
 
-## Scaling to 400,000+ scenes
+These are pseudo-labels generated from NDWI processing. A model trained on
+them learns to reproduce that algorithm's classifications. It does not prove
+physical depth or independent water-detection accuracy. Independent manually
+reviewed masks or field observations are needed for external validation.
+
+## Temporal split and normalization
+
+Input channels are the two previous normalized NDWI images plus their two
+validity masks. NDWI is clipped to its theoretical [-1, 1] interval and mapped
+to [0, 1] using a fixed transform so dates remain on a comparable scale.
+Training/validation are split by target scene chronologically before patches
+are extracted. Neighbouring patches from one target scene cannot leak across
+the validation boundary.
+
+## Forecast products
+
+Seasonal spatial forecast: the model predicts the next chronological seasonal
+water-probability raster and four relative NDWI classes from the latest two
+scenes. It is a one-step forecast; recursive multi-year raster forecasts are
+not claimed.
+
+Annual projection: a separate linear trend extrapolates annual mean seasonal
+water area from the historical raster archive. It reports the available scene
+count per year and a 95% prediction interval when estimable. A short record,
+missing seasons, changes in sensor/processing and hydrological drivers can make
+the projection unreliable. It is not a hydrological simulation.
+
+## Area and depth
+
+NDWI supports water detection/extent analysis, not bathymetric measurement.
+Percentile-derived classes are relative NDWI classes, not metres or validated
+depth. Physical volume requires bathymetric/depth rasters or field
+measurements with units, vertical datum, acquisition date and grid alignment.
+
+## Scale to 400,000+ scenes
 
 Do not flatten every raster pixel into one giant CSV or load the archive into
 RAM. Store imagery as tiled Cloud-Optimized GeoTIFF or Zarr, metadata in a
-manifest/database and reference masks as aligned raster products. Use a
-streaming window reader, bounded prefetch, deterministic scene-level splits,
-resumable training, checkpointing and experiment tracking. Track stable scene
-IDs, checksums, sensor, collection, processing level, scale/offset, CRS,
-resolution, acquisition date, cloud mask, index formula and label provenance.
-A 400,000-scene workflow requires storage and compute planning; increasing
-CSV rows or batch size is not sufficient.
-
-## Forecasting and LLM
-
-Future forecasts require dated time-series observations and chronological
-holdout evaluation; useful covariates include rainfall, inflow/outflow and
-withdrawal records. Scaling a historical raster by a hand-set factor is a
-scenario illustration, not a validated forecast.
-
-An LLM may explain validated measurements and trends, but must not invent
-area, depth, volume, accuracy or hydrological causes. Keep natural-language
-explanations separate from numerical calculation and cite the source scene,
-date, processing configuration and uncertainty.
+manifest/database and reference masks as aligned raster products. Use streaming
+window readers, bounded prefetch, deterministic scene-level splits, resumable
+training, checkpoints and experiment tracking. Track stable scene IDs,
+checksums, sensor, collection, processing level, scale/offset, CRS, resolution,
+acquisition date, cloud mask, index formula and label provenance.

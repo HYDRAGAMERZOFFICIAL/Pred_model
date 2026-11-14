@@ -9,6 +9,8 @@ from skimage.filters import threshold_otsu
 import tensorflow as tf
 
 from src.data_processor import LakeDataProcessor
+from src.predictor import predict_next_season
+from src.forecasting import forecast_annual_water_area
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 import io
 
@@ -161,22 +163,132 @@ if current_tif and os.path.exists(current_tif):
         st.table(summary_df)
 
     with tab3:
-        st.subheader("Forecasting")
-        st.warning(
-            "A validated future forecast is not available yet. The current archive contains "
-            "seasonal scenes for Jakkur Lake, not a sufficiently dense, regularly sampled "
-            "time series. This panel will not fabricate future raster values or accuracy scores."
-        )
-        st.markdown(
-            "Use the historical analysis and spectral converter tabs for measured scene "
-            "processing. A defensible forecast needs dated observations, independent target "
-            "measurements and, where available, rainfall and inflow/outflow covariates."
-        )
-        st.markdown("#### What is needed to enable forecasting")
-        st.write(
-            "Several years of consistently processed observations at a useful time interval, "
-            "with an explicit target such as water area or gauge level. Evaluation must use "
-            "a chronological holdout period."
+        st.subheader("Seasonal and Annual Forecasts")
+        st.caption("Forecasts are derived from the dated NDWI archive. Seasonal maps come from the trained multi-task U-Net; annual area is a separate statistical trend projection.")
+
+        st.markdown("### 1. Next seasonal spatial forecast")
+        model_path = os.path.join("knowledge_base", "ndwi_multitask_unet.keras")
+        if os.path.isfile(model_path):
+            if st.button("Generate next-season prediction", type="primary", key="run_seasonal_forecast"):
+                try:
+                    with st.spinner("Running temporal U-Net over the latest two NDWI scenes..."):
+                        forecast_result = predict_next_season(
+                            data_dir=".",
+                            model_dir="knowledge_base",
+                            output_dir="outputs",
+                            dataset_csv="NDWI_pixel_depth_dataset.csv",
+                        )
+                    st.session_state["seasonal_forecast_result"] = forecast_result
+                except Exception as exc:
+                    st.error(f"Seasonal prediction failed: {exc}")
+
+            result = st.session_state.get("seasonal_forecast_result")
+            if result:
+                st.success("Next-period spatial prediction generated.")
+                st.write("Input scenes:", " → ".join(result["input_scenes"]))
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Predicted water pixels", f'{result["water_pixels"]:,}')
+                if result["water_area_km2"] is not None:
+                    c2.metric("Predicted water area", f'{result["water_area_km2"]:.5f} km²')
+                else:
+                    c2.metric("Predicted water area", "CRS area unavailable")
+                c3.metric("Valid pixels", f'{result["valid_pixels"]:,}')
+                fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+                im = axes[0].imshow(result["water_probability"], cmap="Blues", vmin=0, vmax=1)
+                axes[0].set_title("Next-season water probability")
+                fig.colorbar(im, ax=axes[0], fraction=0.046, pad=0.04)
+                im2 = axes[1].imshow(result["relative_classes"], cmap="viridis", vmin=0, vmax=3)
+                axes[1].set_title("Predicted relative NDWI classes")
+                fig.colorbar(im2, ax=axes[1], ticks=[0, 1, 2, 3], fraction=0.046, pad=0.04)
+                for axis in axes:
+                    axis.set_axis_off()
+                st.pyplot(fig)
+                st.download_button(
+                    "Download water probability GeoTIFF",
+                    data=open(result["water_probability_path"], "rb").read(),
+                    file_name=os.path.basename(result["water_probability_path"]),
+                    mime="image/tiff",
+                )
+                st.download_button(
+                    "Download relative class GeoTIFF",
+                    data=open(result["relative_class_path"], "rb").read(),
+                    file_name=os.path.basename(result["relative_class_path"]),
+                    mime="image/tiff",
+                )
+            else:
+                st.info("The model is available. Generate a forecast to create georeferenced GeoTIFF outputs.")
+        else:
+            st.warning("The multi-task model has not been trained in this environment yet.")
+            st.code(
+                "python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --patch-size 64 --stride 32 --epochs 50",
+                language="bash",
+            )
+            st.caption("Training uses the generated pixel CSV where scene coverage is sufficient. Missing scene labels are derived from the documented Otsu/quantile procedure and recorded in the report.")
+
+        st.divider()
+        st.markdown("### 2. Annual water-area projection")
+        try:
+            annual_result = forecast_annual_water_area(".")
+            annual_rows = annual_result["annual_history"]
+            if annual_rows:
+                annual_df = pd.DataFrame(annual_rows).rename(columns={
+                    "year": "Year",
+                    "mean_seasonal_water_area_km2": "Mean seasonal water area (km²)",
+                    "scenes": "Scenes available",
+                })
+                st.dataframe(annual_df, use_container_width=True, hide_index=True)
+                fig, ax = plt.subplots(figsize=(9, 4))
+                ax.plot(
+                    annual_df["Year"],
+                    annual_df["Mean seasonal water area (km²)"],
+                    marker="o",
+                    linewidth=2,
+                    label="Historical annual mean",
+                )
+                if annual_result["forecast"] is not None:
+                    projection = annual_result["forecast"]
+                    ax.scatter(
+                        [projection["year"]],
+                        [projection["mean_seasonal_water_area_km2"]],
+                        marker="D",
+                        s=75,
+                        label="Annual trend projection",
+                    )
+                    low, high = projection["prediction_interval_95_km2"]
+                    if low is not None and high is not None:
+                        ax.vlines(projection["year"], low, high, linewidth=2, label="95% prediction interval")
+                    st.metric(
+                        f'{projection["year"]} projected annual mean area',
+                        f'{projection["mean_seasonal_water_area_km2"]:.5f} km²',
+                    )
+                    st.caption(
+                        f'Linear trend R²: {projection["r_squared"]:.3f}. '
+                        f'Projection interval: {low:.5f}–{high:.5f} km².'
+                    )
+                    st.warning(projection["warning"])
+                else:
+                    st.info(annual_result.get("reason", "Insufficient annual observations for projection."))
+                ax.set_xlabel("Year")
+                ax.set_ylabel("Mean seasonal water area (km²)")
+                ax.set_title("Historical and projected annual water area")
+                ax.grid(alpha=0.25)
+                ax.legend()
+                st.pyplot(fig)
+                st.download_button(
+                    "Download annual projection data",
+                    data=annual_df.to_csv(index=False).encode("utf-8"),
+                    file_name="annual_water_area_history.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info("No dated seasonal NDWI rasters were found for annual analysis.")
+        except Exception as exc:
+            st.error(f"Annual projection could not be calculated: {exc}")
+
+        st.info(
+            "Interpretation: seasonal U-Net outputs are predictions of algorithm-derived labels. "
+            "Annual values are linear trend projections of observed annual mean seasonal area. "
+            "Neither output is a physical water-depth forecast or a hydrological simulation."
         )
 
     with tab4:
