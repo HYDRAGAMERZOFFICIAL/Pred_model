@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 
-from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, _starts
+from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, build_temporal_input, _starts
 
 
 def _pixel_area_m2(src, height, width):
@@ -129,12 +129,11 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
         for col in _starts(width, patch_size, stride):
             h = min(patch_size, height - row)
             w = min(patch_size, width - col)
-            x = np.zeros((1, patch_size, patch_size, 4), dtype=np.float32)
+            legacy_schema = int(metadata.get("input_channels", 4)) == 4
+            features = build_temporal_input(first, second, legacy=legacy_schema)
+            x = np.zeros((1, patch_size, patch_size, features.shape[-1]), dtype=np.float32)
             sl = np.s_[row:row+h, col:col+w]
-            x[0, :h, :w, 0] = first["normalized"][sl]
-            x[0, :h, :w, 1] = second["normalized"][sl]
-            x[0, :h, :w, 2] = first["valid"][sl].astype(np.float32)
-            x[0, :h, :w, 3] = second["valid"][sl].astype(np.float32)
+            x[0, :h, :w, :] = features[sl]
             result = model.predict(x, verbose=0)
             water = result["water_probability"][0, :h, :w, 0]
             classes = result["relative_class_probabilities"][0, :h, :w, :]
