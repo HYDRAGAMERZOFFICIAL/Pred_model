@@ -331,7 +331,7 @@ if current_tif and os.path.exists(current_tif):
         Transform raw satellite spectrum GeoTIFF rasters (**Red, Green, Blue, NIR, SWIR**) into fully processed,
         georeferenced **NDWI GeoTIFF images** matching the project's multi-temporal raster standards.
         Features automatic **spatial alignment, reprojection, Otsu thresholding, 4-tier relative depth classification,
-        and volumetric calculation**.
+        and geospatial water-area calculation**. Physical volume requires measured bathymetry or depth data.
         """)
 
         sp_processor = SpectrumNDWIProcessor()
