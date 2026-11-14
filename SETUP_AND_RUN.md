@@ -109,7 +109,7 @@ The current temporal U-Net uses six input channels:
 5. validity mask at t-2;
 6. validity mask at t-1.
 
-Training applies eight rotations/reflections to training patches only and derives class-loss weights from the training split. Validation remains chronological and unaugmented. The model has a water-probability segmentation head and a four-class relative-NDWI head.
+Training applies eight rotations/reflections to training patches only and derives class-balanced loss weights for both water and relative-class heads from the training split. Validation remains chronological and unaugmented. The model has a water-probability segmentation head and a four-class relative-NDWI head.
 
 For later compatible retraining, use `--mode both` to train a new full candidate and fine-tune an existing compatible active model. If the input schema changed, incremental fine-tuning is skipped or rejected; use `--mode full`. Existing 4-channel checkpoints are retained as older versions and are not silently reshaped.
 
