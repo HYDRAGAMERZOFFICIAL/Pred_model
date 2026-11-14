@@ -3,10 +3,37 @@ import json
 import os
 import numpy as np
 import rasterio
+from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 import tensorflow as tf
 
 from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, _starts
+
+
+def _pixel_area_m2(src, height, width):
+    crs = src.crs
+    if crs is None:
+        return None
+    transform = src.transform
+    if crs.is_projected:
+        axes = PyprojCRS.from_user_input(crs).axis_info[:2]
+        fx = axes[0].unit_conversion_factor if axes else 1.0
+        fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
+        return abs(transform.a * transform.e - transform.b * transform.d) * fx * fy
+    if crs.is_geographic:
+        geod = PyprojCRS.from_user_input(crs).get_geod()
+        if geod is None:
+            raise ValueError(f"Unable to determine geodesic for CRS {crs}.")
+        row, col = height // 2, width // 2
+        corners = [
+            xy(transform, row, col, offset="ul"),
+            xy(transform, row, col, offset="ur"),
+            xy(transform, row, col, offset="lr"),
+            xy(transform, row, col, offset="ll"),
+        ]
+        lons, lats = zip(*corners)
+        return abs(geod.polygon_area_perimeter(lons, lats)[0])
+    return None
 
 
 def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv"):
@@ -75,25 +102,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
 
     pixel_area_m2 = None
     with rasterio.open(second["path"]) as src:
-        crs = src.crs
-        if crs is not None and crs.is_projected:
-            axes = PyprojCRS.from_user_input(crs).axis_info[:2]
-            fx = axes[0].unit_conversion_factor if axes else 1.0
-            fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
-            transform = src.transform
-            pixel_area_m2 = abs(transform.a * transform.e - transform.b * transform.d) * fx * fy
-        elif crs is not None and crs.is_geographic:
-            geod = crs.get_geod()
-            transform = src.transform
-            r, c = height // 2, width // 2
-            corners = [
-                rasterio.transform.xy(transform, r, c, offset="ul"),
-                rasterio.transform.xy(transform, r, c, offset="ur"),
-                rasterio.transform.xy(transform, r, c, offset="lr"),
-                rasterio.transform.xy(transform, r, c, offset="ll"),
-            ]
-            lons, lats = zip(*corners)
-            pixel_area_m2 = abs(geod.polygon_area_perimeter(lons, lats)[0])
+        pixel_area_m2 = _pixel_area_m2(src, height, width)
     water_pixels = int(predicted_water.sum())
     area_m2 = float(water_pixels * pixel_area_m2) if pixel_area_m2 is not None else None
     return {
