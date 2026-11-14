@@ -45,7 +45,6 @@ class LakeDataProcessor:
                 fy = axes[1].unit_conversion_factor if len(axes) > 1 else fx
                 pixel_area = abs(transform.a * transform.e - transform.b * transform.d) * fx * fy
             elif crs.is_geographic:
-                # geod = crs.get_geod()
                 geod = PyprojCRS.from_user_input(crs).get_geod()
                 row, col = src.height // 2, src.width // 2
                 corners = [

@@ -242,7 +242,7 @@ if current_tif and os.path.exists(current_tif):
                         training_report.get("water_validation_confusion_matrix", []),
                         index=["Actual non-water", "Actual water"],
                         columns=["Predicted non-water", "Predicted water"],
-                    ), use_container_width=True)
+                    ), width="stretch")
                 if class_metrics:
                     st.markdown("**Relative NDWI class validation metrics**")
                     class_table = pd.DataFrame([
@@ -250,13 +250,13 @@ if current_tif and os.path.exists(current_tif):
                         for name, values in class_metrics.items()
                         if name.isdigit()
                     ]).replace({"Class": {"0": "Non-water", "1": "Shallow", "2": "Moderate", "3": "Deep"}})
-                    st.dataframe(class_table, use_container_width=True, hide_index=True)
+                    st.dataframe(class_table, width="stretch", hide_index=True)
                     st.write("Confusion matrix (rows = actual, columns = predicted)")
                     st.dataframe(pd.DataFrame(
                         training_report.get("relative_class_validation_confusion_matrix", []),
                         index=["Actual non-water", "Actual shallow", "Actual moderate", "Actual deep"],
                         columns=["Predicted non-water", "Predicted shallow", "Predicted moderate", "Predicted deep"],
-                    ), use_container_width=True)
+                    ), width="stretch")
 
         st.divider()
         st.markdown("### 2. Annual water-area projection")
@@ -269,7 +269,7 @@ if current_tif and os.path.exists(current_tif):
                     "mean_seasonal_water_area_km2": "Mean seasonal water area (km²)",
                     "scenes": "Scenes available",
                 })
-                st.dataframe(annual_df, use_container_width=True, hide_index=True)
+                st.dataframe(annual_df, width="stretch", hide_index=True)
                 fig, ax = plt.subplots(figsize=(9, 4))
                 ax.plot(
                     annual_df["Year"],
