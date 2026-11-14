@@ -1,6 +1,6 @@
 # First Run and Future Training Guide
 
-> **The neural prediction feature remains disabled until a candidate passes validation.**
+> **The model is not promoted for production use until a candidate passes validation.**
 >
 > The dashboard also provides a clearly labelled **experimental preview** so a trained model can be inspected before it passes the quality gate. This does not approve the model, promote it, or replace the validated active model. Treat experimental maps as research previews only.
 
