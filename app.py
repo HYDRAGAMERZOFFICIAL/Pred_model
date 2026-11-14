@@ -36,6 +36,32 @@ st.markdown("Satellite water-extent analysis, spectral diagnostics, geospatial m
 processor = LakeDataProcessor()
 tif_files = processor.tif_files
 
+with st.sidebar.expander("Project setup and model readiness", expanded=False):
+    csv_ready = os.path.isfile("NDWI_pixel_depth_dataset.csv")
+    st.write(f"NDWI scenes detected: **{len(tif_files)}**")
+    st.write(f"Pixel-label CSV: **{'Found' if csv_ready else 'Missing'}**")
+    ready_model, ready_report, ready_source = resolve_model_artifacts("knowledge_base")
+    if os.path.isfile(ready_model) and os.path.isfile(ready_report):
+        try:
+            with open(ready_report, encoding="utf-8") as stream:
+                readiness = json.load(stream)
+            if readiness.get("deployment_eligible", False):
+                st.success("A validated model is available.")
+            else:
+                st.warning("A trained candidate is available for experimental preview only; it has not passed validation.")
+            st.caption(f"Model source: {ready_source}")
+            st.caption(f"Input schema: {readiness.get('input_channels', 'legacy')} channels")
+        except (OSError, ValueError):
+            st.warning("A model report exists but could not be read. Review the latest training run.")
+    else:
+        st.warning("No trained model artifact was found. Complete audit and training before using seasonal prediction.")
+        st.code(
+            ".\\.venv\\Scripts\\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv\n"
+            ".\\.venv\\Scripts\\python.exe -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode full --epochs 50",
+            language="powershell",
+        )
+    st.markdown("[Open the setup and training guide](https://github.com/HYDRAGAMERZOFFICIAL/Pred_model/blob/main/SETUP_AND_RUN.md)")
+
 months = [
     "January", "February", "March", "April",
     "May", "June", "July", "August",
