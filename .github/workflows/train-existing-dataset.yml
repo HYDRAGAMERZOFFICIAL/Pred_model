@@ -1,0 +1,104 @@
+name: Train existing NDWI CNN U-Net dataset
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/train-existing-dataset.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ndwi-unet-training
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout main dataset and code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install project and geospatial dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile project
+        run: python -m compileall -q app.py src tests
+
+      - name: Run complete unit test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Audit the committed NDWI images and CSV labels
+        run: |
+          python -m src.dataset_audit \
+            --data-dir . \
+            --dataset-csv NDWI_pixel_depth_dataset.csv \
+            --output dataset_audit_report.json
+
+      - name: Build append-only knowledge base from the committed dataset
+        run: |
+          python -m src.knowledge_base \
+            --data-dir . \
+            --dataset-csv NDWI_pixel_depth_dataset.csv \
+            --archive-dir knowledge_base
+
+      - name: Train temporal CNN U-Net from CSV-supervised scenes
+        run: |
+          python -m src.trainer \
+            --data-dir . \
+            --dataset-csv NDWI_pixel_depth_dataset.csv \
+            --output-dir knowledge_base \
+            --mode full \
+            --patch-size 64 \
+            --stride 32 \
+            --epochs 50 \
+            --batch-size 8 \
+            --validation-sequences 2 \
+            --min-valid-fraction 0.01 \
+            --skip-ingest
+
+      - name: Record source revision and dataset counts
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pandas as pd
+          import rasterio
+          from pathlib import Path
+          scenes = sorted(Path(".").glob("NDWI_*.tif"))
+          labels = pd.read_csv("NDWI_pixel_depth_dataset.csv")
+          metadata = {
+              "git_commit": os.environ["GITHUB_SHA"],
+              "source_scene_count": len(scenes),
+              "csv_label_rows": int(len(labels)),
+              "csv_scenes": int(labels["image"].nunique()),
+              "labels_per_scene": labels.groupby("image").size().to_dict(),
+              "csv_columns": list(labels.columns),
+              "training_report": "knowledge_base/runs/<run-id>/full_retrain/training_report.json",
+              "run_summary": "knowledge_base/runs/<run-id>/run_summary.json",
+          }
+          with open("knowledge_base/dataset_build_summary.json", "w") as f:
+              json.dump(metadata, f, indent=2)
+          print(json.dumps(metadata, indent=2))
+          PY
+
+      - name: Upload knowledge base and trained model candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndwi-cnn-unet-knowledge-base-${{ github.run_number }}
+          path: |
+            knowledge_base/
+            dataset_audit_report.json
+          if-no-files-found: error
+          retention-days: 30
