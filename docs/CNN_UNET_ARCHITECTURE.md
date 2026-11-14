@@ -29,7 +29,7 @@ Every convolution block has two 3 × 3 convolutions, batch normalization and ReL
 
 ## What enters the network today
 
-The current temporal dataset builder creates four input channels:
+The current NDWI-only temporal dataset builder creates six input channels:
 
 1. NDWI at time t−2, normalized from the theoretical [-1, 1] range to [0, 1].
 2. NDWI at time t−1, normalized in the same way.
