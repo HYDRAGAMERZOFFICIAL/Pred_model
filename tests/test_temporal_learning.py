@@ -159,7 +159,9 @@ class TestTemporalLearning(unittest.TestCase):
             self.assertEqual(meta["minimum_label_fraction_per_patch"], 0.01)
             self.assertEqual(x_train.shape[-1], 6)
             self.assertEqual(y_train["relative_class_probabilities"].shape[-1], 3)
+            self.assertEqual(y_train["water_probability"].shape[-1], 3)
             self.assertEqual(len(meta["class_loss_weights"]), 4)
+            self.assertEqual(len(meta["water_loss_weights"]), 2)
 
     def test_csv_labels_are_reconstructed_and_used(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -191,6 +193,7 @@ class TestTemporalLearning(unittest.TestCase):
             )
             self.assertEqual(x_train.shape[-1], 6)
             self.assertEqual(y_train["relative_class_probabilities"].shape[-1], 3)
+            self.assertEqual(y_train["water_probability"].shape[-1], 3)
             self.assertGreater(len(x_val), 0)
             self.assertEqual(meta["validation_sequences"], 1)
 
