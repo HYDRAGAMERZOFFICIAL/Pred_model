@@ -43,7 +43,7 @@ transform so dates remain on a comparable scale. Reflectance bands are
 normalized to [0, 1].
 Training/validation are split by target scene chronologically before patches
 are extracted. Training patches receive eight rotation/reflection transforms;
-validation patches are not augmented. Relative-class loss weights are computed
+validation patches are not augmented. Water and relative-class loss weights are computed
 from training labels only. Three-scene windows that cross a missing four-month
 seasonal period are skipped rather than treated as equally spaced observations.
 Neighbouring patches from one target scene cannot leak across the validation boundary.
