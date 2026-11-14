@@ -103,6 +103,16 @@ def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv"):
                     "Some scenes use Otsu/quantile pseudo-labels instead of CSV labels: "
                     + ", ".join(fallback)
                 )
+            sparse_csv = [
+                scene["name"] for scene in scenes
+                if scene["label_source"] == "generated_pixel_csv"
+                and 0.0 < scene["csv_coverage"] < 0.95
+            ]
+            if sparse_csv:
+                report["warnings"].append(
+                    "These scenes use partial CSV pixel supervision; unlabelled pixels are masked from the U-Net loss: "
+                    + ", ".join(sparse_csv)
+                )
         except Exception as exc:
             report["errors"].append(f"Training labels or temporal grids are invalid: {exc}")
     else:
