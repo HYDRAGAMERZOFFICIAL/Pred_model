@@ -12,6 +12,7 @@ on:
     branches: [main]
     paths:
       - "NDWI_*.tif"
+      - "NDWI_*.tiff"
       - "NDWI_pixel_depth_dataset.csv"
       - "spectral_data/**"
       - "training/TRIGGER_CNN_UNET_TRAINING.txt"
