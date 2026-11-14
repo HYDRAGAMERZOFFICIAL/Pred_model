@@ -8,7 +8,12 @@ def masked_water_bce(y_true, y_pred):
     valid = tf.cast(y_true[..., 1], tf.float32)
     pred = tf.clip_by_value(tf.cast(y_pred[..., 0], tf.float32), 1e-7, 1.0 - 1e-7)
     loss = tf.keras.backend.binary_crossentropy(label, pred)
-    return tf.reduce_sum(loss * valid) / (tf.reduce_sum(valid) + 1e-6)
+    if y_true.shape[-1] is not None and y_true.shape[-1] >= 3:
+        sample_weight = tf.cast(y_true[..., 2], tf.float32)
+    else:
+        sample_weight = tf.ones_like(valid)
+    effective_weight = valid * sample_weight
+    return tf.reduce_sum(loss * effective_weight) / (tf.reduce_sum(effective_weight) + 1e-6)
 
 
 def masked_class_crossentropy(y_true, y_pred):
