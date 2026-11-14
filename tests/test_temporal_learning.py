@@ -37,6 +37,20 @@ class TestTemporalLearning(unittest.TestCase):
         ]
         self.assertEqual(consecutive_target_indices(scenes), [2, 3, 6, 7])
 
+    def test_sparse_csv_labels_are_kept_and_unlabelled_pixels_are_masked(self):
+        frame = pd.DataFrame({
+            "row": [0, 1, 2, 3], "column": [0, 1, 2, 3],
+            "water": [0, 1, 0, 1], "depth_class": [0, 1, 0, 2],
+        })
+        labels = _labels_from_csv(frame, (4, 4), np.ones((4, 4), dtype=bool))
+        self.assertIsNotNone(labels)
+        water, classes, valid, coverage = labels
+        self.assertEqual(int(valid.sum()), 4)
+        self.assertAlmostEqual(coverage, 0.25)
+        self.assertEqual(int(water[1, 1]), 1)
+        self.assertEqual(int(classes[3, 3]), 2)
+        self.assertFalse(valid[0, 1])
+
     def test_csv_labels_reject_fractional_coordinates(self):
         frame = pd.DataFrame({
             "row": [0.5], "column": [0], "water": [1], "depth_class": [1]
