@@ -6,7 +6,7 @@ import pandas as pd
 import rasterio
 from rasterio.transform import from_origin
 
-from src.temporal_learning import temporal_sort_key, load_temporal_scenes, prepare_temporal_training_data
+from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data
 
 
 class TestTemporalLearning(unittest.TestCase):
@@ -23,6 +23,19 @@ class TestTemporalLearning(unittest.TestCase):
         self.assertEqual(sorted(names, key=temporal_sort_key), [
             "NDWI_MAY_AUG_22.tif", "NDWI_SEP_DEC_22.tif", "NDWI_JAN_APR_23.tif"
         ])
+
+    def test_windows_skip_missing_seasonal_periods(self):
+        scenes = [
+            {"name": "NDWI_JAN_APR_22.tif"},
+            {"name": "NDWI_MAY_AUG_22.tif"},
+            {"name": "NDWI_SEP_DEC_22.tif"},
+            {"name": "NDWI_JAN_APR_23.tif"},
+            {"name": "NDWI_SEP_DEC_23.tif"},
+            {"name": "NDWI_JAN_APR_24.tif"},
+            {"name": "NDWI_MAY_AUG_24.tif"},
+            {"name": "NDWI_SEP_DEC_24.tif"},
+        ]
+        self.assertEqual(consecutive_target_indices(scenes), [2, 3, 6, 7])
 
     def test_csv_labels_are_reconstructed_and_used(self):
         with tempfile.TemporaryDirectory() as tmp:

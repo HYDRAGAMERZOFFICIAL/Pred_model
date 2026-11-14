@@ -38,6 +38,23 @@ def discover_ndwi_rasters(data_dir):
     return sorted(paths, key=temporal_sort_key)
 
 
+
+def consecutive_target_indices(scenes):
+    """Keep only three-scene windows with regular four-month spacing."""
+    ordinals = []
+    for scene in scenes:
+        year, period, _ = temporal_sort_key(scene["name"])
+        if year == 9999 or period not in (1, 2, 3):
+            continue
+        ordinals.append(year * 3 + period - 1)
+    if len(ordinals) != len(scenes):
+        return []
+    return [
+        index for index in range(2, len(scenes))
+        if ordinals[index - 1] - ordinals[index - 2] == 1
+        and ordinals[index] - ordinals[index - 1] == 1
+    ]
+
 def _labels_from_csv(frame, shape, raster_valid):
     required = {"row", "column", "water", "depth_class"}
     if frame is None or frame.empty or not required.issubset(frame.columns):
@@ -174,14 +191,19 @@ def prepare_temporal_training_data(
 ):
     """Chronologically split target scenes before patch extraction."""
     scenes = load_temporal_scenes(raster_paths, dataset_csv)
-    target_indices = list(range(2, len(scenes)))
+    target_indices = consecutive_target_indices(scenes)
     if len(target_indices) < validation_sequences + 1:
         raise ValueError(
-            f"Need at least {validation_sequences + 3} dated scenes for "
-            f"{validation_sequences} validation sequences; found {len(scenes)}."
+            f"Need at least {validation_sequences + 1} consecutive three-scene windows; "
+            f"found {len(target_indices)}. Add missing seasonal NDWI scenes or reduce "
+            "the validation sequence count."
         )
     val_targets = target_indices[-validation_sequences:]
     train_targets = target_indices[:-validation_sequences]
+    skipped_targets = [
+        scenes[index]["name"] for index in range(2, len(scenes))
+        if index not in target_indices
+    ]
 
     def collect(indices):
         xs, yw, yc = [], [], []
@@ -208,6 +230,7 @@ def prepare_temporal_training_data(
         "scene_count": len(scenes),
         "training_sequences": len(train_targets),
         "validation_sequences": len(val_targets),
+        "skipped_targets_due_to_missing_seasonal_periods": skipped_targets,
         "training_patches": int(len(x_train)),
         "validation_patches": int(len(x_val)),
         "label_sources": sorted({scene["label_source"] for scene in scenes}),

@@ -32,8 +32,9 @@ Input channels are the two previous normalized NDWI images plus their two
 validity masks. NDWI is clipped to its theoretical [-1, 1] interval and mapped
 to [0, 1] using a fixed transform so dates remain on a comparable scale.
 Training/validation are split by target scene chronologically before patches
-are extracted. Neighbouring patches from one target scene cannot leak across
-the validation boundary.
+are extracted. Three-scene windows that cross a missing four-month seasonal
+period are skipped rather than treated as equally spaced observations.
+Neighbouring patches from one target scene cannot leak across the validation boundary.
 
 ## Forecast products
 
