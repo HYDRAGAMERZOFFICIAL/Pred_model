@@ -267,7 +267,7 @@ def _train_candidate(
 def train_and_save_model(
     data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
-    learning_rate=1e-4, seed=42, mode="both", ingest=True,
+    learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
     if ingest:
@@ -288,7 +288,7 @@ def train_and_save_model(
         csv_path = candidate if os.path.isfile(candidate) else None
 
     x_train, y_train, x_val, y_val, scenes, data_report = prepare_temporal_training_data(
-        raster_paths, csv_path, patch_size, stride, validation_sequences,
+        raster_paths, csv_path, patch_size, stride, validation_sequences, min_valid_fraction,
     )
     data_report["archive_scene_count"] = len(raster_paths)
     data_report["archive_manifest"] = os.path.join(output_dir, "archive", "manifest.json")
@@ -413,6 +413,8 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--validation-sequences", type=int, default=2)
+    parser.add_argument("--min-valid-fraction", type=float, default=0.01,
+                        help="Minimum fraction of annotated target pixels required to keep a training patch (default: 0.01 for sparse CSV labels).")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mode", choices=["both", "full", "incremental"], default="both")
