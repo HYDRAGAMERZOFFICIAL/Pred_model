@@ -23,6 +23,8 @@ def train_and_save_model(data_dir=".", label_dir=None, patch_size=128, stride=64
             "<source-stem>_mask.tif, with 0=land and 1=water. Training will not "
             "substitute random data or Otsu pseudo-labels."
         )
+    # Patch-level random splitting is only a temporary baseline. For production,
+    # split by source scene/date before patch extraction to prevent spatial leakage.
     order = np.random.permutation(len(X))
     n_val = max(1, int(round(len(X) * 0.2)))
     val_idx, train_idx = order[:n_val], order[n_val:]
