@@ -15,7 +15,7 @@ from src.model import (
     build_multitask_unet, masked_water_bce, masked_class_crossentropy,
     masked_water_iou, masked_class_accuracy,
 )
-from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data, _starts
+from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data, build_temporal_input, _starts
 from src.model_validation import deployment_eligibility
 from src.knowledge_base import (
     ingest_scenes, archived_raster_paths, build_training_label_csv,
@@ -72,11 +72,9 @@ def _evaluate_scene_forecasts(model, scenes, validation_target_names, patch_size
                 h = min(patch_size, height - row)
                 w = min(patch_size, width - col)
                 sl = np.s_[row:row + h, col:col + w]
-                x = np.zeros((1, patch_size, patch_size, 4), dtype=np.float32)
-                x[0, :h, :w, 0] = first["normalized"][sl]
-                x[0, :h, :w, 1] = previous["normalized"][sl]
-                x[0, :h, :w, 2] = first["valid"][sl].astype(np.float32)
-                x[0, :h, :w, 3] = previous["valid"][sl].astype(np.float32)
+                features = build_temporal_input(first, previous)
+                x = np.zeros((1, patch_size, patch_size, features.shape[-1]), dtype=np.float32)
+                x[0, :h, :w, :] = features[sl]
                 output = model.predict(x, verbose=0)
                 water_sum[sl] += output["water_probability"][0, :h, :w, 0]
                 class_sum[sl] += output["relative_class_probabilities"][0, :h, :w, :]
@@ -121,6 +119,23 @@ def _evaluate_scene_forecasts(model, scenes, validation_target_names, patch_size
         },
     }
 
+def _augment_training_patches(x_train, y_train):
+    """Apply the eight square-grid dihedral transforms to training patches only."""
+    xs, targets = [], {name: [] for name in y_train}
+    for rotation in range(4):
+        rotated_x = np.rot90(x_train, rotation, axes=(1, 2))
+        xs.append(rotated_x)
+        for name, values in y_train.items():
+            targets[name].append(np.rot90(values, rotation, axes=(1, 2)))
+        flipped_x = np.flip(rotated_x, axis=2)
+        xs.append(flipped_x)
+        for name, values in y_train.items():
+            targets[name].append(np.flip(np.rot90(values, rotation, axes=(1, 2)), axis=2))
+    return np.concatenate(xs, axis=0).copy(), {
+        name: np.concatenate(values, axis=0).copy() for name, values in targets.items()
+    }
+
+
 def _compile_loaded_model(model, learning_rate):
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
@@ -140,6 +155,7 @@ def _compile_loaded_model(model, learning_rate):
 def _train_candidate(
     mode, x_train, y_train, x_val, y_val, scenes, data_report, output_dir,
     patch_size, stride, epochs, batch_size, learning_rate, seed, initial_model=None,
+    augment=True,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -159,7 +175,11 @@ def _train_candidate(
         )
         model = _compile_loaded_model(model, learning_rate)
     else:
-        model = build_multitask_unet((patch_size, patch_size, 4), learning_rate)
+        model = build_multitask_unet((patch_size, patch_size, x_train.shape[-1]), learning_rate)
+
+    training_patches_before_augmentation = int(len(x_train))
+    if augment:
+        x_train, y_train = _augment_training_patches(x_train, y_train)
 
     checkpoint_path = os.path.join(output_dir, "best.keras")
     hooks = [
@@ -248,7 +268,13 @@ def _train_candidate(
         "patch_size": patch_size,
         "stride": stride,
         "input_timesteps": 2,
-        "input_channels": 4,
+        "input_channels": int(x_train.shape[-1]),
+        "input_channel_names": data_report.get("input_channel_names", []),
+        "training_patches_before_augmentation": training_patches_before_augmentation,
+        "training_patches_after_augmentation": int(len(x_train)),
+        "spatial_augmentation": "8 dihedral rotations/reflections" if augment else "disabled",
+        "class_pixel_counts_train": data_report.get("class_pixel_counts_train"),
+        "class_loss_weights": data_report.get("class_loss_weights"),
         "epochs_requested": epochs,
         "epochs_completed": len(history.history.get("loss", [])),
         "best_validation_loss": evaluated_val_loss,
@@ -268,6 +294,7 @@ def train_and_save_model(
     data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
     learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
+    augment=True,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
     if ingest:
@@ -303,7 +330,20 @@ def train_and_save_model(
         candidates.append(("full_retrain", None))
     if mode in ("both", "incremental"):
         if previous_model and os.path.isfile(previous_model):
-            candidates.append(("incremental_finetune", previous_model))
+            existing = tf.keras.models.load_model(previous_model, compile=False)
+            existing_channels = int(existing.input_shape[-1])
+            if existing_channels == int(x_train.shape[-1]):
+                candidates.append(("incremental_finetune", previous_model))
+            elif mode == "incremental":
+                raise RuntimeError(
+                    f"Active model expects {existing_channels} input channels but the current temporal feature schema has {x_train.shape[-1]}. "
+                    "Run --mode full to create a versioned model for the new feature schema; the active model will remain untouched."
+                )
+            else:
+                print(
+                    f"INFO: Skipping incremental fine-tuning because the active model expects "
+                    f"{existing_channels} channels and the new model schema has {x_train.shape[-1]}."
+                )
         elif mode == "incremental":
             raise RuntimeError("No active model exists for fine-tuning. Run --mode full or --mode both first.")
     if not candidates:
@@ -315,7 +355,7 @@ def train_and_save_model(
         model_path, report = _train_candidate(
             candidate_mode, x_train, y_train, x_val, y_val, scenes, data_report,
             candidate_dir, patch_size, stride, epochs, batch_size,
-            learning_rate, seed, initial_model,
+            learning_rate, seed, initial_model, augment,
         )
         version = register_model_version(model_path, report, output_dir, f"{run_id}_{candidate_mode}")
         report["version"] = version["run_id"]
@@ -356,11 +396,14 @@ def train_and_save_model(
                 },
                 compile=False,
             )
-            active_model = _compile_loaded_model(active_model, learning_rate)
-            baseline_metrics = active_model.evaluate(
-                x_val, y_val, batch_size=batch_size, verbose=0, return_dict=True
-            )
-            active_baseline_loss = float(baseline_metrics["loss"])
+            if int(active_model.input_shape[-1]) != int(x_val.shape[-1]):
+                print("INFO: Active model uses a different input schema; skipping cross-schema loss comparison.")
+            else:
+                active_model = _compile_loaded_model(active_model, learning_rate)
+                baseline_metrics = active_model.evaluate(
+                    x_val, y_val, batch_size=batch_size, verbose=0, return_dict=True
+                )
+                active_baseline_loss = float(baseline_metrics["loss"])
         except Exception as exc:
             print(f"WARNING: Existing active model could not be evaluated on this holdout; promotion is disabled: {exc}")
 
@@ -414,7 +457,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--validation-sequences", type=int, default=2)
     parser.add_argument("--min-valid-fraction", type=float, default=0.01,
-                        help="Minimum fraction of annotated target pixels required to keep a training patch (default: 0.01 for sparse CSV labels).")
+                        help="Minimum fraction of labelled target pixels required to keep a training patch.")
+    parser.add_argument("--no-augmentation", action="store_true",
+                        help="Disable the default eight-way rotation/reflection augmentation.")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mode", choices=["both", "full", "incremental"], default="both")
@@ -422,4 +467,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     values = vars(args)
     values["ingest"] = not values.pop("skip_ingest")
+    values["augment"] = not values.pop("no_augmentation")
     train_and_save_model(**values)
