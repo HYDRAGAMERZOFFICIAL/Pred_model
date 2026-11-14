@@ -323,6 +323,21 @@ def prepare_temporal_training_data(
             target["relative_class_probabilities"],
             class_weights[labels][..., None].astype(np.float32),
         ], axis=-1)
+    water_target = y_train["water_probability"]
+    water_labels = water_target[..., 0].astype(np.int64)
+    water_valid = water_target[..., 1] > 0.5
+    water_counts = np.bincount(water_labels[water_valid], minlength=2).astype(np.float64)
+    water_present = water_counts > 0
+    water_weights = np.ones(2, dtype=np.float32)
+    if water_present.any():
+        raw_water_weights = np.sqrt(water_counts[water_present].sum() / (water_present.sum() * water_counts[water_present]))
+        water_weights[water_present] = (raw_water_weights / raw_water_weights.mean()).astype(np.float32)
+    for target in (y_train, y_val):
+        labels = target["water_probability"][..., 0].astype(np.int64)
+        target["water_probability"] = np.concatenate([
+            target["water_probability"],
+            water_weights[labels][..., None].astype(np.float32),
+        ], axis=-1)
     metadata = {
         "input_channel_names": (
             ["ndwi_t_minus_2", "ndwi_t_minus_1", "ndwi_change_signed", "ndwi_change_absolute", "valid_t_minus_2", "valid_t_minus_1"]
@@ -338,6 +353,8 @@ def prepare_temporal_training_data(
         "reflectance_scale": float(reflectance_scale),
         "class_pixel_counts_train": class_counts.astype(int).tolist(),
         "class_loss_weights": class_weights.astype(float).tolist(),
+        "water_pixel_counts_train": water_counts.astype(int).tolist(),
+        "water_loss_weights": water_weights.astype(float).tolist(),
         "target_scenes_train": [scenes[i]["name"] for i in train_targets],
         "target_scenes_validation": [scenes[i]["name"] for i in val_targets],
         "scene_count": len(scenes),
