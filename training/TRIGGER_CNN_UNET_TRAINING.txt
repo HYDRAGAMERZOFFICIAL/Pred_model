@@ -1,0 +1,1 @@
+Training request: run the updated temporal CNN U-Net pipeline after adding six-channel temporal change features, class-balanced loss, training-only dihedral augmentation, and optional multispectral temporal input support. This marker is intentionally tracked so a complete baseline retraining can be triggered without changing or fabricating source imagery or CSV labels.
