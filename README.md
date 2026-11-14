@@ -2,7 +2,7 @@
 
 A TensorFlow/Keras deep-learning project built around a convolutional U-Net encoder-decoder with skip connections and two pixel-wise prediction heads. It learns from chronological NDWI raster patches to predict next-season water probability and four relative NDWI classes, with georeferenced GeoTIFF and PNG exports.
 
-**Current scope:** the temporal U-Net uses two historical NDWI rasters plus their validity masks (four input channels). The repository also contains a separate spectral-to-index workflow, but raw multispectral bands are not yet inputs to temporal U-Net training. See [CNN U-Net Architecture](docs/CNN_UNET_ARCHITECTURE.md) for the exact network and the roadmap to a multispectral temporal U-Net.
+**Current scope:** NDWI-only temporal U-Net uses six channels: two historical NDWI images, signed/absolute NDWI change and two validity masks. An optional multispectral temporal mode accepts aligned 4/5-band per-date stacks for every NDWI scene. The committed sample spectral files are not a complete multi-date series, so the starter model remains NDWI-only. See [CNN U-Net Architecture](docs/CNN_UNET_ARCHITECTURE.md).
 
 ## Scientific scope
 
