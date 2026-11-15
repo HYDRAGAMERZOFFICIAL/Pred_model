@@ -13,7 +13,6 @@ import pandas as pd
 import rasterio
 
 from src.data_processor import LakeDataProcessor, resolve_data_dir
-from src.lake_boundary import load_lake_boundary_mask
 
 SEASON_ORDER = {"JAN_APR": 1, "MAY_AUG": 2, "SEP_DEC": 3}
 
@@ -144,11 +143,11 @@ def load_temporal_scenes(
     raster_paths, dataset_csv=None, spectral_dir=None, reflectance_scale=10000.0,
     lake_boundary=False, boundary_path=None,
 ):
-    """Load aligned scenes, apply the Jakkur ROI and reconstruct pixel labels.
+    """Load aligned full-extent scenes and reconstruct pixel labels from the CSV.
 
-    The ROI only excludes surrounding land and the two internal land islands.
-    Seasonal water/non-water labels inside the lake continue to come from the
-    supplied per-pixel CSV, not from a fixed full-lake water assumption.
+    No manually drawn lake crop is applied. Raster NoData is excluded and the
+    complete valid image footprint, including lake and surrounding land, is
+    retained for training and inference.
     """
     if len(raster_paths) < 3:
         raise ValueError("At least three dated NDWI scenes are needed to build temporal input/target sequences.")
@@ -179,10 +178,12 @@ def load_temporal_scenes(
             profile = src.profile.copy()
             transform, crs = src.transform, src.crs
 
-        lake_roi = np.ones(raw.shape, dtype=bool)
         if lake_boundary:
-            lake_roi = load_lake_boundary_mask(raw.shape, transform, crs, boundary_path)
-            valid &= lake_roi
+            raise ValueError(
+                "The earlier hand-drawn Jakkur ROI was incorrect and has been disabled. "
+                "Temporal learning now uses the complete valid raster footprint."
+            )
+        lake_roi = np.ones(raw.shape, dtype=bool)
 
         stem = os.path.basename(path)
         labels = _labels_from_csv(csv_groups.get(stem), raw.shape, valid)
