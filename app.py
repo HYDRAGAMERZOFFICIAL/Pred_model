@@ -140,7 +140,7 @@ filename = os.path.basename(current_tif) if current_tif else "N/A"
 st.sidebar.caption(f"Active raster: `{filename}`")
 
 if current_tif and os.path.exists(current_tif):
-    arr, pixel_area_m2, crs = processor.load_tif(current_tif, apply_lake_boundary=True)
+    arr, pixel_area_m2, crs = processor.load_tif(current_tif, apply_lake_boundary=False)
     thresh, binary_water, water_pixels, total_valid = processor.compute_otsu_threshold(arr)
     depth_map = processor.compute_depth_map(arr, binary_water)
     metrics = processor.compute_water_metrics(arr, binary_water, pixel_area_m2)
