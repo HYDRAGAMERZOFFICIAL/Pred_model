@@ -73,7 +73,10 @@ class TestJakkurLakeBoundary(unittest.TestCase):
             self.write_scene(b_path, second)
             ra, rb = process_ndwi_tif(a_path), process_ndwi_tif(b_path)
             self.assertAlmostEqual(ra["threshold"], rb["threshold"], places=6)
-            pd.testing.assert_frame_equal(ra["dataset"], rb["dataset"])
+            pd.testing.assert_frame_equal(
+                ra["dataset"].drop(columns=["image"]),
+                rb["dataset"].drop(columns=["image"]),
+            )
 
     def test_future_scene_wrong_grid_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
