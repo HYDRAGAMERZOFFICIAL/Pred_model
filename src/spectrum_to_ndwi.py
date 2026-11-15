@@ -1015,8 +1015,6 @@ def main():
             threshold_method=args.threshold_method,
             min_water_patch_pixels=args.min_patch,
             max_hole_pixels=args.max_hole,
-            lake_boundary=args.lake_boundary,
-            boundary_path=args.boundary,
         )
 
     # Save output NDWI GeoTIFF
