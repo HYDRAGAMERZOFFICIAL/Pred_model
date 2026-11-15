@@ -212,9 +212,11 @@ def generate_dataset(
             depth_profile.update(count=1, dtype="uint8", nodata=255, compress="deflate")
             with rasterio.open(os.path.join(mask_output_dir, f"{name}_relative_classes.tif"), "w", **depth_profile) as dst:
                 dst.write(result["depth_map"], 1)
+            with rasterio.open(path) as source:
+                preview_values = source.read(1).astype(np.float32)
             rgb, _ = render_classification_rgb(
-                result["meta"] and rasterio.open(path).read(1),
-                valid_mask=result["valid_mask"], mode="fixed", threshold=result["threshold"],
+                preview_values, valid_mask=result["valid_mask"],
+                mode="fixed", threshold=result["threshold"],
             )
             from PIL import Image
             Image.fromarray(rgb, mode="RGB").save(
