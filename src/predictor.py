@@ -82,9 +82,9 @@ def resolve_model_artifacts(model_dir="knowledge_base"):
             if not model_path or not report_path:
                 continue
             if not os.path.isabs(model_path):
-                model_path = os.path.join(os.path.dirname(os.path.abspath(model_dir)), model_path)
+                model_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), model_path))
             if not os.path.isabs(report_path):
-                report_path = os.path.join(os.path.dirname(os.path.abspath(model_dir)), report_path)
+                report_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), report_path))
             if os.path.isfile(model_path) and os.path.isfile(report_path):
                 return model_path, report_path, "versioned_candidate_preview"
         except (OSError, ValueError, KeyError, TypeError):
