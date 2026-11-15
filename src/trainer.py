@@ -372,7 +372,7 @@ def train_and_save_model(
     x_train, y_train, x_val, y_val, scenes, data_report = prepare_temporal_training_data(
         raster_paths, csv_path, patch_size, stride, validation_sequences,
         min_valid_fraction, training_spectral_dir, reflectance_scale,
-        lake_boundary=True,
+        lake_boundary=False,
     )
     data_report["archive_scene_count"] = len(raster_paths)
     data_report["archive_manifest"] = os.path.join(output_dir, "archive", "manifest.json")
