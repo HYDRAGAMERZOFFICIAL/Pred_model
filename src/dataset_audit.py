@@ -18,7 +18,7 @@ from src.temporal_learning import (
 )
 
 
-def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spectral_dir=None):
+def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spectral_dir=None, lake_boundary=True):
     data_dir = resolve_data_dir(data_dir)
     csv_path = resolve_dataset_csv(data_dir, dataset_csv)
     raster_paths = discover_ndwi_rasters(data_dir)
@@ -88,7 +88,16 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
 
     if os.path.isfile(csv_path):
         try:
-            scenes = load_temporal_scenes(raster_paths, csv_path, spectral_dir)
+            scenes = load_temporal_scenes(raster_paths, csv_path, spectral_dir, lake_boundary=lake_boundary)
+            if lake_boundary:
+                report["jakkur_lake_boundary"] = {
+                    "applied": True,
+                    "reference": "data/jakkur_lake_boundary.json",
+                    "roi_pixels_by_scene": {
+                        scene["name"]: int(scene["lake_roi"].sum()) for scene in scenes
+                    },
+                    "note": "The ROI excludes surrounding land and internal land islands; seasonal water labels inside the ROI remain scene-specific.",
+                }
             if spectral_dir:
                 report["multispectral"] = {
                     "directory": os.path.abspath(spectral_dir),
@@ -143,8 +152,9 @@ def main():
     parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--output", default="dataset_audit_report.json")
     parser.add_argument("--spectral-dir", default=None, help="Optional directory containing aligned per-scene 4/5-band stacks.")
+    parser.add_argument("--no-lake-boundary", action="store_true", help="Disable the Jakkur ROI for non-Jakkur datasets.")
     args = parser.parse_args()
-    report = audit_dataset(args.data_dir, args.dataset_csv, args.spectral_dir)
+    report = audit_dataset(args.data_dir, args.dataset_csv, args.spectral_dir, lake_boundary=not args.no_lake_boundary)
     with open(args.output, "w", encoding="utf-8") as stream:
         json.dump(report, stream, indent=2)
     print(json.dumps(report, indent=2))
