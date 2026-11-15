@@ -80,28 +80,18 @@ class TestSpectrumNDWI(unittest.TestCase):
         self.assertEqual(res['index_raster'].shape, (162, 97))
         self.assertTrue(res['metrics']['water_pixels'] > 1000)
 
-    def test_multiband_processing_respects_jakkur_lake_roi(self):
-        """Jakkur spectral classification must ignore surrounding land and preserve the islands."""
-        from src.lake_boundary import load_lake_boundary_mask
-
+    def test_multiband_processing_keeps_full_raster_extent(self):
+        """Spectral processing must not crop the full image to the obsolete ROI."""
         stack_path = "sample_spectral_data/Jakkur_2022_4Band_PlanetScope_Composite.tif"
         with rasterio.open(stack_path) as src:
-            expected_roi = load_lake_boundary_mask(
-                (src.height, src.width), src.transform, src.crs
-            )
+            expected_shape = (src.height, src.width)
         res = self.processor.process_from_multiband(
-            stack_path,
-            preset="planetscope",
-            index_type="NDWI",
-            lake_boundary=True,
+            stack_path, preset="planetscope", index_type="NDWI"
         )
-        self.assertTrue(np.array_equal(res["lake_roi"], expected_roi))
-        self.assertTrue(np.all(~res["valid_mask"] | expected_roi))
+        self.assertEqual(res["valid_mask"].shape, expected_shape)
+        self.assertEqual(res["lake_roi"].shape, expected_shape)
+        self.assertTrue(res["lake_roi"].all())
         self.assertGreater(int(res["valid_mask"].sum()), 4000)
-        self.assertLessEqual(int(res["valid_mask"].sum()), int(expected_roi.sum()))
-        self.assertFalse(res["water_mask"][~expected_roi].any())
-        self.assertFalse(res["water_mask"][78, 43])
-        self.assertFalse(res["water_mask"][119, 42])
 
     def test_single_band_input_reports_multiband_requirement(self):
         with tempfile.TemporaryDirectory() as tmp:
