@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 import rasterio
 
+from src.data_processor import resolve_data_dir, resolve_dataset_csv
 from src.temporal_learning import discover_ndwi_rasters, temporal_sort_key
 
 SCHEMA_VERSION = 1
@@ -275,16 +276,17 @@ def active_model_path(archive_dir="knowledge_base"):
 
 def main():
     parser = argparse.ArgumentParser(description="Append NDWI scenes to the permanent knowledgebase archive.")
-    parser.add_argument("--data-dir", default=".")
+    parser.add_argument("--data-dir", default=None, help="Directory containing NDWI GeoTIFFs (defaults to Jakkur_lake_datasets)")
     parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--archive-dir", default="knowledge_base")
     parser.add_argument("--images", nargs="*", default=None, help="Optional explicit GeoTIFF paths.")
     parser.add_argument("--spectral-dir", default=None, help="Optional folder with one co-registered 4/5-band stack per NDWI scene, named with the same scene filename.")
     args = parser.parse_args()
-    paths = args.images or discover_ndwi_rasters(args.data_dir)
+    data_dir = resolve_data_dir(args.data_dir)
+    paths = args.images or discover_ndwi_rasters(data_dir)
     if not paths:
         raise SystemExit("No dated NDWI GeoTIFFs found. Supply --images or place dated scenes in --data-dir.")
-    csv_path = args.dataset_csv if os.path.isabs(args.dataset_csv) else os.path.join(args.data_dir, args.dataset_csv)
+    csv_path = resolve_dataset_csv(data_dir, args.dataset_csv)
     result = ingest_scenes(paths, csv_path if os.path.isfile(csv_path) else None, args.archive_dir, args.spectral_dir)
     print(json.dumps(result, indent=2))
 

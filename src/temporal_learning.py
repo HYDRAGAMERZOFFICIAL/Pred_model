@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 
-from src.data_processor import LakeDataProcessor
+from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 SEASON_ORDER = {"JAN_APR": 1, "MAY_AUG": 2, "SEP_DEC": 3}
 
@@ -27,7 +27,10 @@ def temporal_sort_key(path):
     return year, period, name
 
 
-def discover_ndwi_rasters(data_dir):
+def discover_ndwi_rasters(data_dir=None):
+    data_dir = resolve_data_dir(data_dir)
+    if not os.path.isdir(data_dir):
+        return []
     paths = [
         os.path.join(data_dir, name)
         for name in os.listdir(data_dir)

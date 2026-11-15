@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,7 +10,7 @@ import rasterio
 from skimage.filters import threshold_otsu
 import tensorflow as tf
 
-from src.data_processor import LakeDataProcessor
+from src.data_processor import LakeDataProcessor, resolve_data_dir, resolve_dataset_csv
 from src.predictor import predict_next_season, resolve_model_artifacts
 from src.forecasting import forecast_annual_water_area
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
@@ -34,10 +35,13 @@ st.title("🌊 Lake Water AI Prediction & Analysis Dashboard")
 st.markdown("Satellite water-extent analysis, spectral diagnostics, geospatial measurements and validated model workflows.")
 
 processor = LakeDataProcessor()
+dataset_dir = processor.data_dir
 tif_files = processor.tif_files
+csv_path = resolve_dataset_csv(dataset_dir)
 
 with st.sidebar.expander("Project setup and model readiness", expanded=False):
-    csv_ready = os.path.isfile("NDWI_pixel_depth_dataset.csv")
+    csv_ready = os.path.isfile(csv_path)
+    st.write(f"Dataset folder: **`{dataset_dir}`**")
     st.write(f"NDWI scenes detected: **{len(tif_files)}**")
     st.write(f"Pixel-label CSV: **{'Found' if csv_ready else 'Missing'}**")
     ready_model, ready_report, ready_source = resolve_model_artifacts("knowledge_base")
@@ -56,8 +60,8 @@ with st.sidebar.expander("Project setup and model readiness", expanded=False):
     else:
         st.warning("No trained model artifact was found. Complete audit and training before using seasonal prediction.")
         st.code(
-            ".\\.venv\\Scripts\\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv\n"
-            ".\\.venv\\Scripts\\python.exe -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode full --epochs 50",
+            ".\\.venv-dml\\Scripts\\python.exe -m src.dataset_audit\n"
+            ".\\.venv-dml\\Scripts\\python.exe -m src.trainer --mode full --epochs 50",
             language="powershell",
         )
     st.markdown("[Open the setup and training guide](https://github.com/HYDRAGAMERZOFFICIAL/Pred_model/blob/main/SETUP_AND_RUN.md)")
@@ -80,10 +84,10 @@ def map_month_to_season(m):
 def get_base_raster_for_selection(year_str, month_str):
     code, _ = map_month_to_season(month_str)
     yr = str(year_str)[-2:]
-    matches = [f for f in tif_files if code in f and yr in f]
+    matches = [f for f in tif_files if code in os.path.basename(f) and yr in os.path.basename(f)]
     if matches:
         return matches[0]
-    season_matches = [f for f in tif_files if code in f]
+    season_matches = [f for f in tif_files if code in os.path.basename(f)]
     if season_matches:
         return season_matches[0]
     return tif_files[0] if tif_files else None
@@ -92,7 +96,19 @@ def get_base_raster_for_selection(year_str, month_str):
 st.sidebar.header("🗺️ View Historical / Current Map")
 side_lake = st.sidebar.selectbox("Lake / Site", ["Jakkur Lake"], key="side_lake")
 st.sidebar.caption("Only Jakkur Lake is represented by the committed raster archive. Other sites can be enabled when their scenes are added.")
-side_year = st.sidebar.selectbox("Year", ["2022", "2023", "2024", "2025"], key="side_year")
+
+# Dynamically discover all years present in Jakkur_lake_datasets
+available_years = set()
+for f in tif_files:
+    m = re.search(r"(?:20\d{2}|(?<=_)\d{2})(?=[_.-]|$)", os.path.basename(f))
+    if m:
+        yr = m.group()
+        if len(yr) == 2:
+            yr = f"20{yr}"
+        available_years.add(yr)
+years_list = sorted(list(available_years)) if available_years else ["2022", "2023", "2024", "2025"]
+
+side_year = st.sidebar.selectbox("Year", years_list, index=len(years_list) - 1, key="side_year")
 side_month = st.sidebar.selectbox("Month", months, index=0, key="side_month")
 
 current_tif = get_base_raster_for_selection(side_year, side_month)
@@ -211,10 +227,10 @@ if current_tif and os.path.exists(current_tif):
                 try:
                     with st.spinner("Running temporal U-Net over the latest two NDWI scenes..."):
                         forecast_result = predict_next_season(
-                            data_dir=".",
+                            data_dir=dataset_dir,
                             model_dir="knowledge_base",
                             output_dir="outputs",
-                            dataset_csv="NDWI_pixel_depth_dataset.csv",
+                            dataset_csv=csv_path,
                             allow_unvalidated=True,
                             model_path=model_path,
                             metadata_path=model_report_path,
@@ -325,7 +341,7 @@ if current_tif and os.path.exists(current_tif):
         st.divider()
         st.markdown("### 2. Annual water-area projection")
         try:
-            annual_result = forecast_annual_water_area(".")
+            annual_result = forecast_annual_water_area(dataset_dir)
             annual_rows = annual_result["annual_history"]
             if annual_rows:
                 annual_df = pd.DataFrame(annual_rows).rename(columns={

@@ -1,0 +1,182 @@
+{
+  "data_dir": "A:\\Pred_model\\Jakkur_lake_datasets",
+  "dataset_csv": "A:\\Pred_model\\Jakkur_lake_datasets\\NDWI_pixel_depth_dataset.csv",
+  "scene_count": 11,
+  "scenes": [
+    {
+      "filename": "NDWI_JAN_APR_22.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_MAY_AUG_22.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_SEP_DEC_22.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_JAN_APR_23.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_MAY_AUG_23.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_SEP_DEC_23.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_JAN_APR_24.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_MAY_AUG_24.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_JAN_APR_25.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_MAY_AUG_25.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    },
+    {
+      "filename": "NDWI_SEP_DEC_25.tif",
+      "width": 97,
+      "height": 162,
+      "bands": 1,
+      "crs": "EPSG:4326",
+      "dtype": "float32",
+      "nodata": -3.4028234663852886e+38,
+      "valid_pixels": 7991,
+      "masked_or_nonfinite_pixels": 7723,
+      "total_pixels": 15714,
+      "valid_percent": 50.8527427771414
+    }
+  ],
+  "missing_seasonal_periods": [
+    "SEP_DEC_24"
+  ],
+  "consecutive_training_windows": [
+    "NDWI_SEP_DEC_22.tif",
+    "NDWI_JAN_APR_23.tif",
+    "NDWI_MAY_AUG_23.tif",
+    "NDWI_SEP_DEC_23.tif",
+    "NDWI_JAN_APR_24.tif",
+    "NDWI_MAY_AUG_24.tif",
+    "NDWI_SEP_DEC_25.tif"
+  ],
+  "label_sources": [
+    "generated_pixel_csv"
+  ],
+  "errors": [],
+  "warnings": [
+    "Missing seasonal scenes interrupt temporal windows: SEP_DEC_24"
+  ],
+  "csv_coverage_by_scene": {
+    "NDWI_JAN_APR_22.tif": 1.0,
+    "NDWI_MAY_AUG_22.tif": 1.0,
+    "NDWI_SEP_DEC_22.tif": 1.0,
+    "NDWI_JAN_APR_23.tif": 1.0,
+    "NDWI_MAY_AUG_23.tif": 1.0,
+    "NDWI_SEP_DEC_23.tif": 1.0,
+    "NDWI_JAN_APR_24.tif": 1.0,
+    "NDWI_MAY_AUG_24.tif": 1.0,
+    "NDWI_JAN_APR_25.tif": 1.0,
+    "NDWI_MAY_AUG_25.tif": 1.0,
+    "NDWI_SEP_DEC_25.tif": 1.0
+  }
+}

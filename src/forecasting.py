@@ -5,11 +5,12 @@ import rasterio
 from scipy.stats import linregress, t
 
 from src.temporal_learning import discover_ndwi_rasters, temporal_sort_key
-from src.data_processor import LakeDataProcessor
+from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 
-def forecast_annual_water_area(data_dir="."):
+def forecast_annual_water_area(data_dir=None):
     """Project annual mean seasonal water area; this is not a spatial raster forecast."""
+    data_dir = resolve_data_dir(data_dir)
     paths = discover_ndwi_rasters(data_dir)
     by_year = {}
     scene_rows = []

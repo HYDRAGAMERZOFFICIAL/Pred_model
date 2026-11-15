@@ -44,6 +44,16 @@ class TestLakeDataProcessor(unittest.TestCase):
             X, y = LakeDataProcessor(tmp).create_training_patches(8, 8)
             self.assertEqual((len(X), len(y)), (0, 0))
 
+    def test_default_resolves_to_jakkur_lake_datasets(self):
+        from src.data_processor import resolve_data_dir, resolve_dataset_csv
+        data_dir = resolve_data_dir()
+        self.assertEqual(data_dir, "Jakkur_lake_datasets")
+        csv_path = resolve_dataset_csv()
+        self.assertTrue(os.path.isfile(csv_path))
+        ldp = LakeDataProcessor()
+        self.assertEqual(ldp.data_dir, "Jakkur_lake_datasets")
+        self.assertGreaterEqual(len(ldp.tif_files), 11)
+
 
 if __name__ == "__main__":
     unittest.main()

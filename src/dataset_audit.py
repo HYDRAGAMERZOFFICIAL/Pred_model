@@ -8,6 +8,7 @@ import os
 import numpy as np
 import rasterio
 
+from src.data_processor import resolve_data_dir, resolve_dataset_csv
 from src.temporal_learning import (
     SEASON_ORDER,
     consecutive_target_indices,
@@ -17,8 +18,9 @@ from src.temporal_learning import (
 )
 
 
-def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", spectral_dir=None):
-    csv_path = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
+def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spectral_dir=None):
+    data_dir = resolve_data_dir(data_dir)
+    csv_path = resolve_dataset_csv(data_dir, dataset_csv)
     raster_paths = discover_ndwi_rasters(data_dir)
     report = {
         "data_dir": os.path.abspath(data_dir),
@@ -137,7 +139,7 @@ def audit_dataset(data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", spec
 
 def main():
     parser = argparse.ArgumentParser(description="Audit NDWI GeoTIFF scenes and pixel-label coverage.")
-    parser.add_argument("--data-dir", default=".")
+    parser.add_argument("--data-dir", default=None, help="Directory containing NDWI GeoTIFFs (defaults to Jakkur_lake_datasets)")
     parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--output", default="dataset_audit_report.json")
     parser.add_argument("--spectral-dir", default=None, help="Optional directory containing aligned per-scene 4/5-band stacks.")

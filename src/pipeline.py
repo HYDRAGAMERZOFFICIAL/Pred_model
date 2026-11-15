@@ -9,11 +9,12 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
 import warnings
 warnings.filterwarnings('ignore')
+from src.data_processor import resolve_data_dir, resolve_dataset_csv
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 
 class LakePredictionSystem:
-    def __init__(self, data_dir='.', kb_dir='knowledge_base'):
-        self.data_dir = data_dir
+    def __init__(self, data_dir=None, kb_dir='knowledge_base'):
+        self.data_dir = resolve_data_dir(data_dir)
         self.kb_dir = kb_dir
         os.makedirs(self.kb_dir, exist_ok=True)
         self.model_path = os.path.join(self.kb_dir, 'lake_unet_model.h5')
@@ -40,7 +41,7 @@ class LakePredictionSystem:
 
         if all_datasets:
             master_df = pd.concat(all_datasets, ignore_index=True)
-            csv_path = 'NDWI_pixel_depth_dataset.csv'
+            csv_path = resolve_dataset_csv(self.data_dir, 'NDWI_pixel_depth_dataset.csv')
             master_df.to_csv(csv_path, index=False)
             print(f"=== STEP 2: DATASET GENERATED ({csv_path}) ===")
 

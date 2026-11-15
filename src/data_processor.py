@@ -14,12 +14,47 @@ from pyproj import CRS as PyprojCRS
 from skimage.filters import threshold_otsu
 
 
+DEFAULT_DATASET_DIR = "Jakkur_lake_datasets"
+
+
+def resolve_data_dir(data_dir=None):
+    """Resolve the dataset directory, prioritizing Jakkur_lake_datasets."""
+    if data_dir and data_dir != ".":
+        if os.path.isdir(data_dir):
+            return data_dir
+    for candidate in ["Jakkur_lake_datasets", "jakkur_lake_datasets", "dataset", "."]:
+        if os.path.isdir(candidate):
+            tifs = glob.glob(os.path.join(candidate, "*.tif")) + glob.glob(os.path.join(candidate, "*.tiff"))
+            if tifs:
+                return candidate
+    return data_dir or DEFAULT_DATASET_DIR
+
+
+def resolve_dataset_csv(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv"):
+    """Resolve the dataset CSV path inside the resolved data directory or fallback."""
+    resolved_dir = resolve_data_dir(data_dir)
+    if dataset_csv:
+        if os.path.isabs(dataset_csv) and os.path.isfile(dataset_csv):
+            return dataset_csv
+        candidate = os.path.join(resolved_dir, dataset_csv)
+        if os.path.isfile(candidate):
+            return candidate
+        candidate_root = os.path.join(".", dataset_csv)
+        if os.path.isfile(candidate_root):
+            return candidate_root
+        return candidate
+    candidate = os.path.join(resolved_dir, "NDWI_pixel_depth_dataset.csv")
+    if os.path.isfile(candidate):
+        return candidate
+    return os.path.join(".", "NDWI_pixel_depth_dataset.csv")
+
+
 class LakeDataProcessor:
     """Load, validate and summarize multi-temporal NDWI GeoTIFFs."""
-    def __init__(self, data_dir="."):
-        self.data_dir = data_dir
+    def __init__(self, data_dir=None):
+        self.data_dir = resolve_data_dir(data_dir)
         self.tif_files = sorted(
-            p for p in glob.glob(os.path.join(data_dir, "*.tif"))
+            p for p in (glob.glob(os.path.join(self.data_dir, "*.tif")) + glob.glob(os.path.join(self.data_dir, "*.tiff")))
             if os.path.isfile(p) and not os.path.basename(p).startswith(".")
         )
 

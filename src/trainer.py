@@ -15,6 +15,7 @@ from src.model import (
     build_multitask_unet, masked_water_bce, masked_class_crossentropy,
     masked_water_iou, masked_class_accuracy,
 )
+from src.data_processor import resolve_data_dir, resolve_dataset_csv
 from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_training_data, build_temporal_input, _starts
 from src.model_validation import deployment_eligibility
 from src.knowledge_base import (
@@ -293,17 +294,18 @@ def _train_candidate(
 
 
 def train_and_save_model(
-    data_dir=".", dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
+    data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", output_dir="knowledge_base",
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
     learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
     augment=True, spectral_dir=None, reflectance_scale=10000.0,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
+    data_dir = resolve_data_dir(data_dir)
+    resolved_csv = resolve_dataset_csv(data_dir, dataset_csv)
     if ingest:
         incoming = discover_ndwi_rasters(data_dir)
         if incoming:
-            csv_path = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
-            ingest_scenes(incoming, csv_path if os.path.isfile(csv_path) else None, output_dir, spectral_dir)
+            ingest_scenes(incoming, resolved_csv if os.path.isfile(resolved_csv) else None, output_dir, spectral_dir)
 
     raster_paths = archived_raster_paths(output_dir)
     if not raster_paths:
@@ -313,8 +315,7 @@ def train_and_save_model(
             raise RuntimeError(f"No dated NDWI GeoTIFFs found in archive or {data_dir}.")
     csv_path = build_training_label_csv(output_dir)
     if csv_path is None:
-        candidate = dataset_csv if os.path.isabs(dataset_csv) else os.path.join(data_dir, dataset_csv)
-        csv_path = candidate if os.path.isfile(candidate) else None
+        csv_path = resolved_csv if os.path.isfile(resolved_csv) else None
 
     manifest_path = os.path.join(output_dir, "archive", "manifest.json")
     manifest_scenes = []
@@ -471,8 +472,8 @@ def train_and_save_model(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train versioned NDWI models using the permanent knowledgebase.")
-    parser.add_argument("--data-dir", default=".")
-    parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv")
+    parser.add_argument("--data-dir", default=None, help="Directory containing NDWI GeoTIFFs (defaults to Jakkur_lake_datasets)")
+    parser.add_argument("--dataset-csv", default="NDWI_pixel_depth_dataset.csv", help="Name or path of dataset CSV")
     parser.add_argument("--output-dir", default="knowledge_base")
     parser.add_argument("--patch-size", type=int, default=64)
     parser.add_argument("--stride", type=int, default=32)

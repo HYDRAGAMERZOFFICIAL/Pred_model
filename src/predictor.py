@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 
+from src.data_processor import resolve_data_dir, resolve_dataset_csv
 from src.temporal_learning import discover_ndwi_rasters, load_temporal_scenes, consecutive_target_indices, build_temporal_input, _starts
 from src.knowledge_base import archived_raster_paths, archived_spectral_dir, build_training_label_csv
 
@@ -92,7 +93,9 @@ def resolve_model_artifacts(model_dir="knowledge_base"):
     return active_model, active_report, "missing"
 
 
-def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv", allow_unvalidated=False, model_path=None, metadata_path=None):
+def predict_next_season(data_dir=None, model_dir="knowledge_base", output_dir="outputs", dataset_csv="NDWI_pixel_depth_dataset.csv", allow_unvalidated=False, model_path=None, metadata_path=None):
+    data_dir = resolve_data_dir(data_dir)
+    csv_path = resolve_dataset_csv(data_dir, dataset_csv)
     resolved_model, resolved_report, model_source = resolve_model_artifacts(model_dir)
     model_path = model_path or resolved_model
     metadata_path = metadata_path or resolved_report
@@ -121,7 +124,7 @@ def predict_next_season(data_dir=".", model_dir="knowledge_base", output_dir="ou
             float(metadata.get("reflectance_scale", 10000.0)),
         )
     else:
-        scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), os.path.join(data_dir, dataset_csv))
+        scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), csv_path if os.path.isfile(csv_path) else None)
     if len(scenes) < 3:
         raise ValueError("At least three dated NDWI scenes are required for prediction.")
     if len(scenes) - 1 not in consecutive_target_indices(scenes):
