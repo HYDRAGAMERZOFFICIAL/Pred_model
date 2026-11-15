@@ -58,15 +58,15 @@ def _save_prediction_previews(water_probability, predicted_water, predicted_clas
     else:
         prob_cmap.set_bad(alpha=0.0)
 
-    # High-contrast 2-color palette: Land = neutral gray (#d0d7de), Water = deep aquatic blue (#0969da)
-    water_cmap = ListedColormap(["#d0d7de", "#0969da"])
+    # High-contrast 2-color palette: Land = green (#35A66B), Water = blue (#2478C9)
+    water_cmap = ListedColormap(["#35A66B", "#2478C9"])
     if hasattr(water_cmap, "with_extremes"):
         water_cmap = water_cmap.with_extremes(bad=(0.0, 0.0, 0.0, 0.0))
     else:
         water_cmap.set_bad(alpha=0.0)
 
-    # High-contrast 4-color palette: Land (#d0d7de), Shallow (#7ee787), Moderate (#2f81f7), Deep (#0d419d)
-    class_cmap = ListedColormap(["#d0d7de", "#7ee787", "#2f81f7", "#0d419d"])
+    # High-contrast 4-color palette: Land (#35A66B), Shallow (#F2C14E), Moderate (#2F81F7), Deep (#0D419D)
+    class_cmap = ListedColormap(["#35A66B", "#F2C14E", "#2F81F7", "#0D419D"])
     if hasattr(class_cmap, "with_extremes"):
         class_cmap = class_cmap.with_extremes(bad=(0.0, 0.0, 0.0, 0.0))
     else:
