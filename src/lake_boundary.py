@@ -22,8 +22,10 @@ DEFAULT_BOUNDARY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 def _load_reference(path: str):
     with open(path, encoding="utf-8") as stream:
         document = json.load(stream)
-    props = document["properties"]
-    height, width = int(props["raster_height"]), int(props["raster_width"])
+    # Accept both the original GeoJSON-like envelope and the compact v2 format.
+    props = document.get("properties", document)
+    height = int(props.get("raster_height", props.get("height")))
+    width = int(props.get("raster_width", props.get("width")))
     runs = props["row_runs"]
     if len(runs) != height:
         raise ValueError("Jakkur boundary row count does not match its declared raster height.")
