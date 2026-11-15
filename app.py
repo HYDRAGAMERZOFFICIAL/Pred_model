@@ -698,7 +698,7 @@ if current_tif and os.path.exists(current_tif):
                 rm4.metric("Water Coverage", f"{m['water_coverage_pct']:.2f}%", f"{m['water_pixels']:,} / {m['total_valid_pixels']:,} px")
 
                 # Visual Panels (Row 1: Spectral Bands & Composites)
-                st.markdown("### 🗺️ Visual Diagnostics & Georeferenced Products")
+                st.markdown("### Visual diagnostics and georeferenced products")
                 vcol1, vcol2 = st.columns(2)
 
                 aligned = res.get('aligned_bands', {})
@@ -755,7 +755,7 @@ if current_tif and os.path.exists(current_tif):
                     st.pyplot(fig_d)
 
                 # Export and Integration
-                st.markdown("### 💾 Export & Integrate into Active Project Library")
+                st.markdown("### Export and integrate results")
                 save_col1, save_col2, save_col3 = st.columns(3)
 
                 with save_col1:
