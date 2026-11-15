@@ -153,7 +153,10 @@ class LakeDataProcessor:
                 result["depth_source"] = "Measured depth raster"
         return result
 
-    def create_training_patches(self, patch_size=128, stride=64, label_dir=None):
+    def create_training_patches(
+        self, patch_size=128, stride=64, label_dir=None,
+        lake_boundary=True, boundary_path=None,
+    ):
         """Extract patches only from independent, aligned ground-truth masks.
 
         Label naming: <source-stem>_mask.tif. Values are 0=land and 1=water.
@@ -174,6 +177,11 @@ class LakeDataProcessor:
                 image = img.read(1).astype(np.float32)
                 label = lab.read(1)
                 valid = self._valid_mask(img, image) & (lab.read_masks(1) > 0)
+                if lake_boundary:
+                    from src.lake_boundary import load_lake_boundary_mask
+                    valid &= load_lake_boundary_mask(
+                        image.shape, img.transform, img.crs, boundary_path
+                    )
                 if not np.isin(np.unique(label[valid]), [0, 1]).all():
                     raise ValueError(f"Labels in {label_path} must use 0=land and 1=water.")
                 values = image[valid]
@@ -194,10 +202,12 @@ class LakeDataProcessor:
             return empty, empty.copy()
         return np.stack(xs), np.stack(ys)
 
-    def get_all_tif_info(self):
+    def get_all_tif_info(self, apply_lake_boundary=True, boundary_path=None):
         info = []
         for path in self.tif_files:
-            arr, area, crs = self.load_tif(path)
+            arr, area, crs = self.load_tif(
+                path, apply_lake_boundary=apply_lake_boundary, boundary_path=boundary_path
+            )
             threshold, water, count, total = self.compute_otsu_threshold(arr)
             info.append({
                 "filename": os.path.basename(path), "shape": arr.shape,
