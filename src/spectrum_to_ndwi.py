@@ -298,7 +298,9 @@ class SpectrumNDWIProcessor:
                            resampling: Resampling = Resampling.bilinear,
                            threshold_method: Union[str, float] = 'otsu',
                            min_water_patch_pixels: int = 4,
-                           max_hole_pixels: int = 4) -> dict:
+                           max_hole_pixels: int = 4,
+                           lake_boundary: bool = False,
+                           boundary_path: Optional[str] = None) -> dict:
         """
         Process individual spectral band GeoTIFF files into an NDWI raster
         and full hydrological analytics.
@@ -394,19 +396,30 @@ class SpectrumNDWIProcessor:
         else:
             raise ValueError(f"Unsupported index type: {index_type}")
 
-        # Post-processing and analytics
+        # Apply a reviewed site ROI before thresholding. This removes trees/buildings
+        # outside Jakkur while keeping seasonal water extent dynamic inside the lake.
+        analysis_mask = valid_mask.copy()
+        lake_roi = np.ones(dst_shape, dtype=bool)
+        if lake_boundary:
+            from src.lake_boundary import load_lake_boundary_mask
+            lake_roi = load_lake_boundary_mask(
+                dst_shape, ref_meta["transform"], ref_meta["crs"], boundary_path
+            )
+            analysis_mask &= lake_roi
         post_results = self.post_process_index(
-            index_arr, valid_mask, ref_meta,
+            index_arr, analysis_mask, ref_meta,
             threshold_method=threshold_method,
             min_water_patch_pixels=min_water_patch_pixels,
-            max_hole_pixels=max_hole_pixels
+            # Do not fill enclosed land holes: Jakkur has two mapped land islands.
+            max_hole_pixels=0 if lake_boundary else max_hole_pixels
         )
 
         results = {
             'index_name': idx,
             'index_raster': index_arr,
             'aligned_bands': aligned_bands,
-            'valid_mask': valid_mask,
+            'valid_mask': analysis_mask,
+            'lake_roi': lake_roi,
             'reference_meta': ref_meta,
             **post_results
         }
@@ -423,7 +436,9 @@ class SpectrumNDWIProcessor:
                                index_type: str = 'NDWI',
                                threshold_method: Union[str, float] = 'otsu',
                                min_water_patch_pixels: int = 4,
-                               max_hole_pixels: int = 4) -> dict:
+                               max_hole_pixels: int = 4,
+                               lake_boundary: bool = False,
+                               boundary_path: Optional[str] = None) -> dict:
         """
         Process a multi-band GeoTIFF (e.g. 3-band B8/B4/B3, 4-band Planet, Sentinel-2 composite)
         into an NDWI raster and full hydrological analytics.
@@ -507,18 +522,27 @@ class SpectrumNDWIProcessor:
         else:
             raise ValueError(f"Unsupported index type: {index_type}")
 
+        analysis_mask = valid_mask.copy()
+        lake_roi = np.ones(valid_mask.shape, dtype=bool)
+        if lake_boundary:
+            from src.lake_boundary import load_lake_boundary_mask
+            lake_roi = load_lake_boundary_mask(
+                valid_mask.shape, ref_meta["transform"], ref_meta["crs"], boundary_path
+            )
+            analysis_mask &= lake_roi
         post_results = self.post_process_index(
-            index_arr, valid_mask, ref_meta,
+            index_arr, analysis_mask, ref_meta,
             threshold_method=threshold_method,
             min_water_patch_pixels=min_water_patch_pixels,
-            max_hole_pixels=max_hole_pixels
+            max_hole_pixels=0 if lake_boundary else max_hole_pixels
         )
 
         return {
             'index_name': idx,
             'index_raster': index_arr,
             'aligned_bands': aligned_bands,
-            'valid_mask': valid_mask,
+            'valid_mask': analysis_mask,
+            'lake_roi': lake_roi,
             'reference_meta': ref_meta,
             **post_results
         }
