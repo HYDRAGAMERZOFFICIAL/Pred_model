@@ -38,7 +38,7 @@ python -m unittest discover -s tests -v
 Keep dated NDWI GeoTIFFs in `Jakkur_lake_datasets/`. Filenames must include a
 year and one of JAN_APR, MAY_AUG or SEP_DEC. The pixel CSV should contain the
 columns image, row, column, water and depth_class, as produced by the
-lake-aware dataset generator.
+full-extent NDWI dataset generator.
 
 ```bash
 python -m src.trainer --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
@@ -52,31 +52,40 @@ and derives class-balanced loss weights for both water and relative-class heads 
 - knowledge_base/ndwi_multitask_best.keras
 - knowledge_base/multitask_training_report.json
 
-The supplied Jakkur archive contains 11 dated NDWI GeoTIFF scenes and a pixel
-CSV with 87,901 rows (7,991 rows per scene). The GeoTIFFs are 97 × 162 pixels
-(15,714 grid cells) in EPSG:4326 on a common grid. The checked-in
-`data/jakkur_lake_boundary.json` represents the user-reviewed lake ROI
-(4,489 pixels, including two excluded internal land islands). Of each scene's
-7,991 legacy CSV rows, 4,487 intersect that ROI; the other 3,504 per scene are
-outside-lake labels and are ignored by temporal training. The ROI is a spatial
-constraint, not a permanently wet-water mask: seasonal water/non-water labels
-inside the ROI still come from the scene's pixel CSV.
+The supplied Jakkur archive contains 11 dated NDWI GeoTIFF scenes and a
+pixel CSV with 87,901 rows (7,991 rows per scene). Each TIFF is 97 × 162 pixels
+(15,714 grid cells) in EPSG:4326 on a common grid. The 7,991 finite pixels per
+scene form the observed raster footprint; the remaining 7,723 NaN pixels are
+outside-coverage/NoData, not water. The CSV labels every finite pixel.
 
-Generate fresh, lake-aware pixel labels from current or future NDWI TIFFs with:
+The corrected interpretation is: higher NDWI pixels in the central lake are
+water; lower NDWI pixels around the lake are land; NaN/outside-coverage pixels
+remain NoData. The previous hand-drawn blue ROI was based on a mistaken reading
+of the image and has been removed from training, analysis and prediction. The
+full 97 × 162 raster is retained—no lake-only crop is applied.
+
+The existing CSV water labels closely match Otsu thresholding over valid
+pixels (approximately 99.2%–100% agreement across the 11 scenes). They are
+still algorithm-derived labels, not independent field observations. Otsu is
+a useful baseline for new NDWI rasters, but each output should be reviewed
+before it is treated as training ground truth.
+
+Generate full-extent pixel labels and QA masks/PNGs from current or future
+single-band NDWI TIFFs with:
 
 ```bash
-python -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_lake_roi.csv --write-masks
+python -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_generated.csv --write-masks
 ```
 
-The generator exports the existing nine-column CSV schema and optional
-georeferenced QA masks. Outside-ROI pixels are omitted from the CSV and marked
-NoData in the QA rasters. Explicitly named inputs can also be passed with
-`--input`; automatic discovery selects single-band files named
-`NDWI_*.tif` or `NDWI_*.tiff`. The trainer and predictor both apply the same
-spatial ROI, including to legacy CSVs and model outputs. Partially labelled
-pixels remain masked out of the loss. Otsu/quantile pseudo-labels are a
-fallback only for scenes without usable CSV labels, and are calculated inside
-the ROI. The report records label provenance and per-scene coverage.
+The generator uses every finite pixel, classifies water with NDWI >= the
+per-scene Otsu threshold and land below it, and preserves NaN/NoData as 255 in
+the georeferenced mask and grey in the PNG. The PNG shows the entire raster:
+water blue, land green, NoData grey. Use `--threshold zero` or a numeric
+`--threshold` only when supported by the sensor/product and reviewed labels.
+
+The supplied sequence is missing `SEP_DEC_24`; `SEP_DEC_25` is present. The
+trainer skips temporal windows crossing that gap and does not fabricate the
+missing acquisition.
 
 ## Open the dashboard after training
 
