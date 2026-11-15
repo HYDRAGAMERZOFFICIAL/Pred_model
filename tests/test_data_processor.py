@@ -44,9 +44,8 @@ class TestLakeDataProcessor(unittest.TestCase):
             X, y = LakeDataProcessor(tmp).create_training_patches(8, 8)
             self.assertEqual((len(X), len(y)), (0, 0))
 
-    def test_legacy_patch_extractor_clips_to_jakkur_roi(self):
+    def test_legacy_patch_extractor_uses_full_image_with_external_labels(self):
         from rasterio.transform import Affine
-        from src.lake_boundary import load_lake_boundary_mask
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = os.path.join(tmp, "Jakkur_lake_datasets")
@@ -59,7 +58,6 @@ class TestLakeDataProcessor(unittest.TestCase):
                 0.0000898315360824157, 0, 77.606535373,
                 0, -0.00008983153086419803, 13.093574087,
             )
-            roi = load_lake_boundary_mask(shape, transform, "EPSG:4326")
             profile = {
                 "driver": "GTiff", "height": shape[0], "width": shape[1],
                 "count": 1, "dtype": "float32", "crs": "EPSG:4326",
