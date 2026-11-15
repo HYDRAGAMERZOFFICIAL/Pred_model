@@ -8,8 +8,12 @@ from src.temporal_learning import discover_ndwi_rasters, temporal_sort_key
 from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 
-def forecast_annual_water_area(data_dir=None):
-    """Project annual mean seasonal water area; this is not a spatial raster forecast."""
+def forecast_annual_water_area(data_dir=None, lake_boundary=True, boundary_path=None):
+    """Project annual mean seasonal Jakkur water area within the reviewed lake ROI.
+
+    Set lake_boundary=False only when using this module for another study site.
+    This is an annual area trend, not a spatial raster forecast.
+    """
     data_dir = resolve_data_dir(data_dir)
     paths = discover_ndwi_rasters(data_dir)
     by_year = {}
@@ -17,7 +21,9 @@ def forecast_annual_water_area(data_dir=None):
     for path in paths:
         year = int(re_search_year(os.path.basename(path)))
         processor = LakeDataProcessor(data_dir)
-        arr, pixel_area_m2, crs = processor.load_tif(path)
+        arr, pixel_area_m2, crs = processor.load_tif(
+            path, apply_lake_boundary=lake_boundary, boundary_path=boundary_path
+        )
         threshold, water_mask, water_pixels, valid_pixels = processor.compute_otsu_threshold(arr)
         area_km2 = float(water_pixels * pixel_area_m2 / 1_000_000.0)
         by_year.setdefault(year, []).append(area_km2)
