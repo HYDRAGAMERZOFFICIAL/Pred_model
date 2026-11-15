@@ -66,7 +66,7 @@ class LakeDataProcessor:
         return valid
 
     def load_tif(self, file_path, apply_lake_boundary=False, boundary_path=None):
-        """Read a raster and calculate pixel area; optionally clip analysis to Jakkur's lake ROI."""
+        """Read the complete raster, mask NoData and calculate geodesic pixel area."""
         with rasterio.open(file_path) as src:
             raw = src.read(1).astype(np.float32)
             arr = raw.copy()
