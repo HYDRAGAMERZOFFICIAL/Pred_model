@@ -19,7 +19,7 @@ from rasterio.transform import xy
 from skimage.filters import threshold_otsu
 
 from src.data_processor import resolve_data_dir
-from src.lake_boundary import load_lake_boundary_mask
+from src.raster_semantics import classify_water_land
 
 
 CLASS_NAMES = {0: "Non-water", 1: "Shallow", 2: "Moderate", 3: "Deep"}
@@ -88,7 +88,7 @@ def _relative_classes(image, water_mask):
 
 def process_ndwi_tif(
     image_path: str,
-    lake_boundary: bool = True,
+    lake_boundary: bool = False,
     boundary_path: str | None = None,
     threshold_method: str | float = "otsu",
 ):
@@ -108,10 +108,12 @@ def process_ndwi_tif(
         if crs is None:
             raise ValueError(f"{image_path} has no CRS; cannot align the lake ROI.")
         if lake_boundary:
-            roi = load_lake_boundary_mask(image.shape, transform, crs, boundary_path)
-        else:
-            roi = np.ones(image.shape, dtype=bool)
-        label_domain = valid & roi
+            raise ValueError(
+                "The earlier hand-drawn blue ROI was based on an incorrect interpretation "
+                "and is disabled. Process the complete valid raster footprint instead."
+            )
+        roi = np.ones(image.shape, dtype=bool)
+        label_domain = valid
 
     if not label_domain.any():
         raise ValueError(f"No valid pixels inside the lake ROI for {image_path}.")
@@ -125,7 +127,9 @@ def process_ndwi_tif(
     else:
         raise ValueError("threshold_method must be 'otsu', 'zero', or a numeric cutoff.")
 
-    water_mask = label_domain & (image >= threshold)
+    water_mask, land_mask, nodata_mask, class_report = classify_water_land(
+        image, valid_mask=valid, mode="fixed", threshold=threshold
+    )
     depth_class, q33, q67 = _relative_classes(image, water_mask)
 
     rows, cols = np.where(label_domain)
@@ -159,7 +163,10 @@ def process_ndwi_tif(
         "depth_map": depth_output,
         "valid_mask": valid,
         "lake_roi": roi,
+        "land_mask": land_mask,
+        "nodata_mask": nodata_mask,
         "label_domain": label_domain,
+        "class_report": class_report,
         "threshold": threshold,
         "q33": q33,
         "q67": q67,
@@ -171,7 +178,7 @@ def process_ndwi_tif(
 def generate_dataset(
     input_paths,
     output_csv="NDWI_pixel_depth_dataset.csv",
-    lake_boundary=True,
+    lake_boundary=False,
     boundary_path=None,
     threshold_method="otsu",
     write_masks=False,
@@ -225,7 +232,7 @@ def main(argv=None):
     parser.add_argument("--recursive", action="store_true", help="Search the input folder recursively.")
     parser.add_argument("--output-csv", default="NDWI_pixel_depth_dataset.csv")
     parser.add_argument("--boundary", default=None, help="Optional boundary JSON; defaults to the checked-in Jakkur ROI.")
-    parser.add_argument("--no-lake-boundary", action="store_true", help="Disable the Jakkur ROI for another study site.")
+    parser.add_argument("--no-lake-boundary", action="store_true", help="Deprecated compatibility flag; full-raster processing is now the default.")
     parser.add_argument("--threshold", default="otsu", help="otsu, zero, or a numeric NDWI cutoff.")
     parser.add_argument("--write-masks", action="store_true", help="Write georeferenced QA water and relative-class masks.")
     parser.add_argument("--mask-output-dir", default="generated_masks")
@@ -240,7 +247,7 @@ def main(argv=None):
         except ValueError as exc:
             parser.error("--threshold must be 'otsu', 'zero', or a number.")
     frame, reports = generate_dataset(
-        input_paths, args.output_csv, not args.no_lake_boundary,
+        input_paths, args.output_csv, False,
         args.boundary, threshold, args.write_masks, args.mask_output_dir,
     )
     print(f"Saved {len(frame):,} lake-ROI pixel rows to {args.output_csv}")
