@@ -13,6 +13,7 @@ import pandas as pd
 import rasterio
 
 from src.data_processor import LakeDataProcessor, resolve_data_dir
+from src.lake_boundary import load_lake_boundary_mask
 
 SEASON_ORDER = {"JAN_APR": 1, "MAY_AUG": 2, "SEP_DEC": 3}
 
@@ -139,8 +140,16 @@ def _load_spectral_stack(path, reference_grid, reflectance_scale=10000.0):
     return normalized.astype(np.float32), valid, scale
 
 
-def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, reflectance_scale=10000.0):
-    """Load aligned scenes and reconstruct their pixel labels from the CSV."""
+def load_temporal_scenes(
+    raster_paths, dataset_csv=None, spectral_dir=None, reflectance_scale=10000.0,
+    lake_boundary=False, boundary_path=None,
+):
+    """Load aligned scenes, apply the Jakkur ROI and reconstruct pixel labels.
+
+    The ROI only excludes surrounding land and the two internal land islands.
+    Seasonal water/non-water labels inside the lake continue to come from the
+    supplied per-pixel CSV, not from a fixed full-lake water assumption.
+    """
     if len(raster_paths) < 3:
         raise ValueError("At least three dated NDWI scenes are needed to build temporal input/target sequences.")
     csv_groups = {}
@@ -170,10 +179,16 @@ def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, refl
             profile = src.profile.copy()
             transform, crs = src.transform, src.crs
 
+        lake_roi = np.ones(raw.shape, dtype=bool)
+        if lake_boundary:
+            lake_roi = load_lake_boundary_mask(raw.shape, transform, crs, boundary_path)
+            valid &= lake_roi
+
         stem = os.path.basename(path)
         labels = _labels_from_csv(csv_groups.get(stem), raw.shape, valid)
         if labels is None:
-            threshold, water_mask, _, _ = LakeDataProcessor.compute_otsu_threshold(raw)
+            roi_values = np.where(valid, raw, np.nan)
+            threshold, water_mask, _, _ = LakeDataProcessor.compute_otsu_threshold(roi_values)
             class_map = LakeDataProcessor.compute_depth_map(raw, water_mask)
             water = water_mask.astype(np.uint8)
             label_valid = valid
@@ -205,7 +220,7 @@ def load_temporal_scenes(raster_paths, dataset_csv=None, spectral_dir=None, refl
         scenes.append({
             "path": path, "name": stem, "image": raw, "normalized": normalized,
             "spectral": spectral, "spectral_valid": spectral_valid, "spectral_scale": spectral_scale,
-            "valid": valid, "label_valid": label_valid, "water": water,
+            "valid": valid, "lake_roi": lake_roi, "label_valid": label_valid, "water": water,
             "classes": class_map, "threshold": threshold, "label_source": label_source,
             "csv_coverage": coverage, "profile": profile, "transform": transform, "crs": crs,
         })
@@ -275,10 +290,10 @@ def _extract_sequence_patches(scenes, target_index, patch_size, stride, min_vali
 def prepare_temporal_training_data(
     raster_paths, dataset_csv=None, patch_size=64, stride=32,
     validation_sequences=2, min_valid_fraction=0.01, spectral_dir=None,
-    reflectance_scale=10000.0,
+    reflectance_scale=10000.0, lake_boundary=False, boundary_path=None,
 ):
     """Chronologically split target scenes before patch extraction."""
-    scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale)
+    scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale, lake_boundary, boundary_path)
     target_indices = consecutive_target_indices(scenes)
     if len(target_indices) < validation_sequences + 1:
         raise ValueError(

@@ -140,7 +140,7 @@ filename = os.path.basename(current_tif) if current_tif else "N/A"
 st.sidebar.caption(f"Active raster: `{filename}`")
 
 if current_tif and os.path.exists(current_tif):
-    arr, pixel_area_m2, crs = processor.load_tif(current_tif)
+    arr, pixel_area_m2, crs = processor.load_tif(current_tif, apply_lake_boundary=True)
     thresh, binary_water, water_pixels, total_valid = processor.compute_otsu_threshold(arr)
     depth_map = processor.compute_depth_map(arr, binary_water)
     metrics = processor.compute_water_metrics(arr, binary_water, pixel_area_m2)
@@ -154,6 +154,7 @@ if current_tif and os.path.exists(current_tif):
 
     with tab1:
         st.subheader(f"Analysis for {side_lake} — {side_month} {side_year}")
+        st.caption("Spatial analysis is clipped to the reviewed Jakkur Lake footprint. Surrounding vegetation, buildings and the two internal land islands are excluded.")
         col1, col2 = st.columns(2)
 
         with col1:
@@ -666,14 +667,16 @@ if current_tif and os.path.exists(current_tif):
                                 multiband_path=multiband_file,
                                 preset=preset_choice,
                                 index_type=selected_index,
-                                threshold_method=thresh_val_arg
+                                threshold_method=thresh_val_arg,
+                                lake_boundary=True,
                             )
                         elif band_paths:
                             res = sp_processor.process_from_files(
                                 band_paths=band_paths,
                                 index_type=selected_index,
                                 reference_band='green' if 'green' in band_paths else list(band_paths.keys())[0],
-                                threshold_method=thresh_val_arg
+                                threshold_method=thresh_val_arg,
+                                lake_boundary=True,
                             )
                         else:
                             st.error("Please supply valid spectral bands.")
