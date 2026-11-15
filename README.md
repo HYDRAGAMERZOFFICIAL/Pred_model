@@ -65,7 +65,7 @@ of the image and has been removed from training, analysis and prediction. The
 full 97 × 162 raster is retained—no lake-only crop is applied.
 
 The existing CSV water labels closely match Otsu thresholding over valid
-pixels (approximately 99.2%–100% agreement across the 11 scenes). They are
+pixels (approximately 99.4%–100% agreement across the 11 scenes). They are
 still algorithm-derived labels, not independent field observations. Otsu is
 a useful baseline for new NDWI rasters, but each output should be reviewed
 before it is treated as training ground truth.
