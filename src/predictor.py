@@ -87,34 +87,61 @@ def _save_prediction_previews(water_probability, predicted_water, predicted_clas
 
 
 def resolve_model_artifacts(model_dir="knowledge_base"):
-    """Return the approved active model, or latest versioned candidate for preview."""
+    """Return the approved active model, or best/latest versioned candidate for preview."""
     active_model = os.path.join(model_dir, "ndwi_multitask_unet.keras")
     active_report = os.path.join(model_dir, "multitask_training_report.json")
+    active_eligible = False
+    active_macro_f1 = -1.0
+    active_val_loss = float("inf")
+
     if os.path.isfile(active_model) and os.path.isfile(active_report):
-        return active_model, active_report, "active_model"
+        try:
+            with open(active_report, encoding="utf-8") as stream:
+                metadata = json.load(stream)
+            active_eligible = bool(metadata.get("deployment_eligible", False))
+            active_macro_f1 = float(metadata.get("water_validation_metrics", {}).get("macro_f1", -1.0) or -1.0)
+            active_val_loss = float(metadata.get("best_validation_loss", float("inf")) or float("inf"))
+            if active_eligible:
+                return active_model, active_report, "active_model"
+        except (OSError, ValueError, KeyError):
+            pass
+
+    # Search versioned candidates
+    candidate_list = []
     summaries = sorted(glob.glob(os.path.join(model_dir, "runs", "*", "run_summary.json")), reverse=True)
     for summary_path in summaries:
         try:
             with open(summary_path, encoding="utf-8") as stream:
                 summary = json.load(stream)
-            selected = summary.get("selected_candidate")
             candidates = summary.get("candidates", [])
-            candidate = next((item for item in candidates if item.get("mode") == selected), None)
-            if candidate is None and candidates:
-                candidate = min(candidates, key=lambda item: item.get("validation_loss", float("inf")))
-            if not candidate:
-                continue
-            model_path, report_path = candidate.get("model_path"), candidate.get("report_path")
-            if not model_path or not report_path:
-                continue
-            if not os.path.isabs(model_path):
-                model_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), model_path))
-            if not os.path.isabs(report_path):
-                report_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), report_path))
-            if os.path.isfile(model_path) and os.path.isfile(report_path):
-                return model_path, report_path, "versioned_candidate_preview"
+            for candidate in candidates:
+                m_path, r_path = candidate.get("model_path"), candidate.get("report_path")
+                if not m_path or not r_path:
+                    continue
+                if not os.path.isabs(m_path):
+                    m_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), m_path))
+                if not os.path.isabs(r_path):
+                    r_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(model_dir)), r_path))
+                if os.path.isfile(m_path) and os.path.isfile(r_path):
+                    with open(r_path, encoding="utf-8") as rf:
+                        rep = json.load(rf)
+                    cand_eligible = bool(rep.get("deployment_eligible", False))
+                    cand_f1 = float(rep.get("water_validation_metrics", {}).get("macro_f1", 0.0) or 0.0)
+                    cand_loss = float(rep.get("best_validation_loss", float("inf")) or float("inf"))
+                    candidate_list.append((cand_eligible, cand_f1, -cand_loss, m_path, r_path))
         except (OSError, ValueError, KeyError, TypeError):
             continue
+
+    if candidate_list:
+        # Sort by: deployment_eligible (True first), water macro F1 (highest first), lowest loss
+        candidate_list.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+        best_cand = candidate_list[0]
+        # If candidate is eligible or beats the active model, prefer it
+        if best_cand[0] or best_cand[1] > active_macro_f1 or not os.path.isfile(active_model):
+            return best_cand[3], best_cand[4], "versioned_candidate_preview"
+
+    if os.path.isfile(active_model) and os.path.isfile(active_report):
+        return active_model, active_report, "active_model"
     return active_model, active_report, "missing"
 
 

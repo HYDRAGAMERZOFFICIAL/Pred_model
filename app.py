@@ -177,7 +177,7 @@ if current_tif and os.path.exists(current_tif):
 
             st.markdown("### 5. Delineated Water Extent (Binary Mask)")
             fig_bin, ax_bin = plt.subplots(figsize=(6, 4.5))
-            ax_bin.imshow(np.ma.array(binary_water, mask=~np.isfinite(arr)), cmap=cmap_water_binary, vmin=0, vmax=1)
+            ax_bin.imshow(np.ma.array(binary_water, mask=~np.isfinite(arr)), cmap=cmap_water_binary, vmin=0, vmax=1, interpolation='nearest', resample=False)
             patches_bin = [
                 mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({total_valid - water_pixels:,} px)'),
                 mpatches.Patch(facecolor='#2478C9', edgecolor='#185D9E', label=f'Water ({water_pixels:,} px)'),
@@ -189,7 +189,7 @@ if current_tif and os.path.exists(current_tif):
         with col2:
             st.markdown("### 3. Relative 3D Depth Map")
             fig3, ax3 = plt.subplots(figsize=(6, 4.5))
-            im3 = ax3.imshow(np.ma.array(depth_map, mask=~np.isfinite(arr)), cmap=cmap_depth_4class, vmin=0, vmax=3)
+            im3 = ax3.imshow(np.ma.array(depth_map, mask=~np.isfinite(arr)), cmap=cmap_depth_4class, vmin=0, vmax=3, interpolation='nearest', resample=False)
             ax3.set_title("Depth Classes (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
             fig3.colorbar(im3, ax=ax3, label='Depth Class')
             st.pyplot(fig3)
@@ -337,17 +337,17 @@ if current_tif and os.path.exists(current_tif):
                     else:
                         mcol2.metric("Predicted Water Area", "CRS area unavailable")
                     mcol3.metric("Valid Scene Pixels", f'{result["valid_pixels"]:,}')
-                fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), dpi=150)
+                fig, axes = plt.subplots(1, 3, figsize=(16, 5.2), dpi=200)
                 
                 pred_valid_mask = result.get("valid_mask")
                 if pred_valid_mask is None:
                     pred_valid_mask = np.isfinite(result["water_probability"])
 
-                # 1. Predicted Water Probability
+                # 1. Predicted Water Probability (Crisp nearest-neighbor pixel rendering)
                 probability_cmap = plt.get_cmap("Blues").copy()
                 probability_cmap.set_bad("#D9DEE7")
                 prob_display = np.ma.array(result["water_probability"], mask=~pred_valid_mask)
-                im0 = axes[0].imshow(prob_display, cmap=probability_cmap, vmin=0.0, vmax=1.0)
+                im0 = axes[0].imshow(prob_display, cmap=probability_cmap, vmin=0.0, vmax=1.0, interpolation='nearest', resample=False)
                 prob_data = np.nan_to_num(result["water_probability"], nan=0.0)
                 if np.any(prob_data >= 0.5):
                     axes[0].contour(prob_data, levels=[0.5], colors=['#dc2626'], linewidths=1.6, linestyles='--')
@@ -359,9 +359,9 @@ if current_tif and os.path.exists(current_tif):
                 cb0.set_ticklabels(['0%', '25%', '50%', '75%', '100%'])
                 cb0.ax.tick_params(labelsize=8)
 
-                # 2. Predicted Water Extent
+                # 2. Predicted Water Extent (Crisp nearest-neighbor pixel rendering)
                 pred_water_binary = (result["water_probability"] >= 0.5).astype(np.uint8)
-                axes[1].imshow(np.ma.array(pred_water_binary, mask=~pred_valid_mask), cmap=cmap_water_binary, vmin=0, vmax=1)
+                axes[1].imshow(np.ma.array(pred_water_binary, mask=~pred_valid_mask), cmap=cmap_water_binary, vmin=0, vmax=1, interpolation='nearest', resample=False)
                 patches_pred_binary = [
                     mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({result["valid_pixels"] - result["water_pixels"]:,} px)'),
                     mpatches.Patch(facecolor='#2478C9', edgecolor='#185D9E', label=f'Predicted Water ({result["water_pixels"]:,} px)'),
@@ -369,8 +369,8 @@ if current_tif and os.path.exists(current_tif):
                 axes[1].legend(handles=patches_pred_binary, loc='lower right', framealpha=0.92, fontsize=7.5)
                 axes[1].set_title("2. Delineated Water Extent", fontsize=10, fontweight='bold', pad=8)
 
-                # 3. Predicted Relative Classes
-                axes[2].imshow(np.ma.array(result["relative_classes"], mask=~pred_valid_mask), cmap=cmap_depth_4class, vmin=0, vmax=3)
+                # 3. Predicted Relative Classes (Crisp nearest-neighbor pixel rendering)
+                axes[2].imshow(np.ma.array(result["relative_classes"], mask=~pred_valid_mask), cmap=cmap_depth_4class, vmin=0, vmax=3, interpolation='nearest', resample=False)
                 patches_pred_classes = [
                     mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
                     mpatches.Patch(facecolor='#F2C14E', edgecolor='#C89D32', label='1: Shallow Water'),
@@ -758,7 +758,7 @@ if current_tif and os.path.exists(current_tif):
 
                     st.markdown("#### 4. Relative Spectral Classification (Proxy Ranks)")
                     fig_d, ax_d = plt.subplots(figsize=(6, 4.5), dpi=140)
-                    ax_d.imshow(np.ma.array(res['depth_map'], mask=~res['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3)
+                    ax_d.imshow(np.ma.array(res['depth_map'], mask=~res['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3, interpolation='nearest', resample=False)
                     ax_d.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
                     patches_d = [
                         mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
