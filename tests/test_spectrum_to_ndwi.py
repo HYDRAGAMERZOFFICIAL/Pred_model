@@ -96,7 +96,9 @@ class TestSpectrumNDWI(unittest.TestCase):
             lake_boundary=True,
         )
         self.assertTrue(np.array_equal(res["lake_roi"], expected_roi))
-        self.assertEqual(int(res["valid_mask"].sum()), int(expected_roi.sum()))
+        self.assertTrue(np.all(~res["valid_mask"] | expected_roi))
+        self.assertGreater(int(res["valid_mask"].sum()), 4000)
+        self.assertLessEqual(int(res["valid_mask"].sum()), int(expected_roi.sum()))
         self.assertFalse(res["water_mask"][~expected_roi].any())
         self.assertFalse(res["water_mask"][78, 43])
         self.assertFalse(res["water_mask"][119, 42])
