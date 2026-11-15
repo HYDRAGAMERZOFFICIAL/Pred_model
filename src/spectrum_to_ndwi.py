@@ -396,22 +396,20 @@ class SpectrumNDWIProcessor:
         else:
             raise ValueError(f"Unsupported index type: {index_type}")
 
-        # Apply a reviewed site ROI before thresholding. This removes trees/buildings
-        # outside Jakkur while keeping seasonal water extent dynamic inside the lake.
+        # Retain the complete valid image. The previous hand-drawn ROI was
+        # misinterpreted and cropped genuine water/land pixels.
+        if lake_boundary:
+            raise ValueError(
+                "The earlier hand-drawn Jakkur ROI was incorrect and is disabled. "
+                "Process the complete raster footprint."
+            )
         analysis_mask = valid_mask.copy()
         lake_roi = np.ones(dst_shape, dtype=bool)
-        if lake_boundary:
-            from src.lake_boundary import load_lake_boundary_mask
-            lake_roi = load_lake_boundary_mask(
-                dst_shape, ref_meta["transform"], ref_meta["crs"], boundary_path
-            )
-            analysis_mask &= lake_roi
         post_results = self.post_process_index(
             index_arr, analysis_mask, ref_meta,
             threshold_method=threshold_method,
             min_water_patch_pixels=min_water_patch_pixels,
-            # Do not fill enclosed land holes: Jakkur has two mapped land islands.
-            max_hole_pixels=0 if lake_boundary else max_hole_pixels
+            max_hole_pixels=max_hole_pixels
         )
 
         results = {
@@ -522,14 +520,13 @@ class SpectrumNDWIProcessor:
         else:
             raise ValueError(f"Unsupported index type: {index_type}")
 
+        if lake_boundary:
+            raise ValueError(
+                "The earlier hand-drawn Jakkur ROI was incorrect and is disabled. "
+                "Process the complete raster footprint."
+            )
         analysis_mask = valid_mask.copy()
         lake_roi = np.ones(valid_mask.shape, dtype=bool)
-        if lake_boundary:
-            from src.lake_boundary import load_lake_boundary_mask
-            lake_roi = load_lake_boundary_mask(
-                valid_mask.shape, ref_meta["transform"], ref_meta["crs"], boundary_path
-            )
-            analysis_mask &= lake_roi
         post_results = self.post_process_index(
             index_arr, analysis_mask, ref_meta,
             threshold_method=threshold_method,
