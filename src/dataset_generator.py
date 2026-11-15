@@ -239,7 +239,6 @@ def main(argv=None):
     parser.add_argument("--input", nargs="*", help="Explicit TIFF paths; overrides --data-dir discovery.")
     parser.add_argument("--recursive", action="store_true", help="Search the input folder recursively.")
     parser.add_argument("--output-csv", default="NDWI_pixel_depth_dataset.csv")
-    parser.add_argument("--boundary", default=None, help="Optional boundary JSON; defaults to the checked-in Jakkur ROI.")
     parser.add_argument("--no-lake-boundary", action="store_true", help="Deprecated compatibility flag; full-raster processing is now the default.")
     parser.add_argument("--threshold", default="otsu", help="otsu, zero, or a numeric NDWI cutoff.")
     parser.add_argument("--write-masks", action="store_true", help="Write georeferenced QA water and relative-class masks.")
@@ -256,9 +255,9 @@ def main(argv=None):
             parser.error("--threshold must be 'otsu', 'zero', or a number.")
     frame, reports = generate_dataset(
         input_paths, args.output_csv, False,
-        args.boundary, threshold, args.write_masks, args.mask_output_dir,
+        None, threshold, args.write_masks, args.mask_output_dir,
     )
-    print(f"Saved {len(frame):,} lake-ROI pixel rows to {args.output_csv}")
+    print(f"Saved {len(frame):,} full-extent valid-pixel rows to {args.output_csv}")
     print(pd.DataFrame(reports).to_string(index=False))
 
 
