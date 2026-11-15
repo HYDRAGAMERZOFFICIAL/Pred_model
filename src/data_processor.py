@@ -155,7 +155,7 @@ class LakeDataProcessor:
 
     def create_training_patches(
         self, patch_size=128, stride=64, label_dir=None,
-        lake_boundary=True, boundary_path=None,
+        lake_boundary=False, boundary_path=None,
     ):
         """Extract patches only from independent, aligned ground-truth masks.
 
@@ -202,7 +202,7 @@ class LakeDataProcessor:
             return empty, empty.copy()
         return np.stack(xs), np.stack(ys)
 
-    def get_all_tif_info(self, apply_lake_boundary=True, boundary_path=None):
+    def get_all_tif_info(self, apply_lake_boundary=False, boundary_path=None):
         info = []
         for path in self.tif_files:
             arr, area, crs = self.load_tif(
