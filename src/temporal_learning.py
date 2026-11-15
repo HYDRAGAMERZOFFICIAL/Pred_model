@@ -199,6 +199,12 @@ def load_temporal_scenes(
             threshold = float(np.nan)
             label_source = "generated_pixel_csv"
 
+        # Never train on outside-lake pixels, even when an older CSV included
+        # those coordinates or an Otsu fallback was generated across the raster.
+        label_valid &= lake_roi
+        water[~lake_roi] = 0
+        class_map[~lake_roi] = 0
+
         # NDWI has a theoretical range of [-1, 1]. A fixed transform keeps
         # the scale comparable across acquisition dates (unlike per-scene min/max).
         normalized = np.clip((np.nan_to_num(raw, nan=0.0) + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
