@@ -54,9 +54,15 @@ Unzip the supplied `Jakkur_lake_datasets.zip` into the project root. It creates 
 - `NDWI_pixel_depth_dataset.csv` with 87,901 rows (7,991 rows per scene);
 - the CSV columns `image,row,column,x,y,NDWI,water,depth_class,depth_label`.
 
-The supplied GeoTIFFs are 97 × 162 pixels (15,714 grid cells), EPSG:4326, and share the same affine transform. The CSV is not full-raster coverage: it has 7,991 coordinates per date. The reviewed blue lake ROI contains 4,489 pixels, of which 4,487 have CSV labels per scene. The remaining 3,504 CSV rows per scene are outside the lake ROI and are excluded before training, even if their original CSV label says water. Two pixels in the ROI are unlabelled and remain masked from the supervised loss.
+The supplied GeoTIFFs are 97 × 162 pixels (15,714 grid cells), EPSG:4326, and share the same affine transform. Each scene has 7,991 finite pixels and 7,723 NaN/outside-coverage pixels. The CSV contains 7,991 rows per scene and covers every finite pixel.
 
-The checked-in `data/jakkur_lake_boundary.json` is a spatial analysis ROI derived from your blue annotation. It is not an always-wet mask: per-scene CSV labels determine water versus non-water inside the ROI, so seasonal changes remain possible. Surrounding plants/buildings and the two enclosed land islands are excluded from training, area measurements and forecasts.
+The corrected interpretation is:
+- Higher NDWI values in the central lake region are water.
+- Lower NDWI values around the lake are land, including vegetation/buildings.
+- NaN/outside-coverage pixels are NoData, not water.
+- The complete 97 × 162 raster is retained. No hand-drawn lake-only crop is applied.
+
+Across all 11 scenes, the CSV water labels agree with Otsu thresholding over valid pixels at approximately 99.2%–100%. These labels are algorithm-derived, not independent field measurements.
 
 The supplied sequence is missing `SEP_DEC_24`; `SEP_DEC_25` is present. The trainer skips temporal windows crossing that gap and does not fabricate the missing acquisition.
 
@@ -77,35 +83,47 @@ Open `dataset_audit_report.json`. Confirm:
 - the Jakkur boundary maps to the raster grid and its per-scene ROI coverage is reported;
 - consecutive training windows are sufficient.
 
-The audit distinguishes CSV supervision from Otsu/quantile pseudo-label fallback. The supplied CSV is algorithm-derived, not independent field ground truth. The loader intersects old CSV coordinates with the Jakkur ROI, so pre-existing outside-lake water labels cannot leak into training.
+The audit distinguishes CSV supervision from Otsu/quantile pseudo-label fallback. The supplied CSV is algorithm-derived, not independent field ground truth. All finite image pixels are retained; NaN/outside-coverage pixels are masked from training and prediction.
 
 
 
-## 5A. Generate lake-aware pixel labels for current and future TIFFs
+## 5A. Generate full-extent pixel labels for current and future TIFFs
 
-The reusable generator replaces the older notebook-only pixel script. It scans dated `NDWI_*.tif` and `NDWI_*.tiff` inputs, applies the reviewed Jakkur ROI **before** thresholding, and writes rows only for valid pixels inside that ROI. Outside-lake pixels are omitted rather than taught as water or land. The two enclosed land islands remain outside the ROI.
+The reusable generator processes the complete valid raster footprint. It does
+not apply the earlier hand-drawn blue polygon, which was based on an incorrect
+interpretation and cropped genuine pixels.
 
-To regenerate labels for the supplied scenes without overwriting the original CSV:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_lake_roi.csv --write-masks
-```
-
-The generator writes a CSV with the same nine columns as the existing dataset and georeferenced QA masks under `generated_masks/`. Pixels outside the ROI are marked NoData (255) in the QA rasters. Review the generated masks before using the new CSV for retraining.
-
-For a future date, add its correctly named NDWI TIFF to `Jakkur_lake_datasets/` and run the same command. Automatic discovery selects only single-band files whose names begin with `NDWI_`. For a differently named file, pass it explicitly:
+For the supplied scenes, run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.dataset_generator --input Jakkur_lake_datasets\custom_scene.tif --output-csv Jakkur_lake_datasets\custom_scene_labels.csv --write-masks
+.\\.venv\\Scripts\\python.exe -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_generated.csv --write-masks
 ```
 
-Use `--threshold zero` or `--threshold -0.12` only when the cutoff is supported by the sensor/product and reviewed labels; the default is Otsu calculated only from valid pixels inside the ROI. Use `--no-lake-boundary` only for a different site with a different independently prepared boundary. Future Jakkur images must overlap the reference footprint; a raster with no meaningful overlap fails with an explicit error instead of silently generating unrelated labels.
+For each scene the generator:
+- reads the full GeoTIFF grid;
+- treats finite NDWI pixels as valid observations;
+- calculates an Otsu threshold over those valid pixels;
+- classifies NDWI >= threshold as water and lower NDWI as land;
+- preserves NaN/NoData as NoData (255) in the GeoTIFF mask;
+- writes a full-grid PNG preview with water blue, land green and NoData grey;
+- exports one CSV row per valid pixel.
 
-For training with the freshly generated CSV, pass its basename to the trainer:
+Automatic discovery selects single-band files named `NDWI_*.tif` or
+`NDWI_*.tiff`. A future TIFF may use a different grid size or resolution; the
+generator processes its full grid and does not force it into the old 97 × 162
+crop. Ensure that the future raster has a correct CRS, affine transform,
+consistent NDWI scaling and a meaningful NoData mask.
+
+For a differently named file, pass it explicitly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.trainer --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset_lake_roi.csv --output-dir knowledge_base --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
+.\\.venv\\Scripts\\python.exe -m src.dataset_generator --input Jakkur_lake_datasets\\custom_scene.tif --output-csv Jakkur_lake_datasets\\custom_scene_labels.csv --write-masks
 ```
+
+Otsu outputs are pseudo-labels and must be reviewed against the source image
+before training. Use `--threshold zero` or a numeric cutoff only when it is
+supported by the sensor/product and validated labels. The generated relative
+classes are NDWI quantiles, not measured depth in metres.
 
 ## 6. Build or update the knowledge base
 
@@ -132,7 +150,7 @@ For the first training run or a new feature schema, use a full retrain:
 .\.venv\Scripts\python.exe -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output-dir knowledge_base --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01
 ```
 
-All temporal training and prediction calls apply the checked-in Jakkur ROI. This also filters legacy CSV labels that include pixels outside the lake. The current temporal U-Net uses six input channels:
+Temporal training and prediction use the complete valid raster footprint. The old manually drawn ROI is no longer applied. The current temporal U-Net uses six input channels:
 1. NDWI at t-2;
 2. NDWI at t-1;
 3. signed NDWI change;
