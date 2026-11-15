@@ -163,7 +163,7 @@ def _run_model_inference_on_pair(model, first, second, patch_size, legacy_schema
 
     water_probability = (water_sum / np.maximum(count, 1)).astype(np.float32)
     class_probability = (class_sum / np.maximum(count[..., None], 1)).astype(np.float32)
-    valid_output = second["valid"]
+    valid_output = second["valid"] & second.get("lake_roi", np.ones(second["valid"].shape, dtype=bool))
     water_probability[~valid_output] = np.nan
     predicted_classes = np.argmax(class_probability, axis=-1).astype(np.uint8)
     predicted_classes[~valid_output] = 255
@@ -173,7 +173,7 @@ def _run_model_inference_on_pair(model, first, second, patch_size, legacy_schema
 
 def _synthesize_scene_from_prediction(water_probability, predicted_classes, ref_scene, period_code, year):
     """Construct an intermediate synthetic scene dictionary for autoregressive multi-step rollout."""
-    valid_mask = ref_scene["valid"]
+    valid_mask = ref_scene["valid"] & ref_scene.get("lake_roi", np.ones(ref_scene["valid"].shape, dtype=bool))
     class_offsets = {0: -0.40, 1: 0.18, 2: 0.35, 3: 0.55}
     ndwi = np.zeros_like(water_probability, dtype=np.float32)
     for c, base in class_offsets.items():
@@ -187,6 +187,7 @@ def _synthesize_scene_from_prediction(water_probability, predicted_classes, ref_
         "image": ndwi,
         "normalized": ndwi,
         "valid": valid_mask,
+        "lake_roi": ref_scene.get("lake_roi", np.ones(valid_mask.shape, dtype=bool)),
         "label_valid": valid_mask,
         "water": (water_probability >= 0.5).astype(np.uint8),
         "classes": predicted_classes,
