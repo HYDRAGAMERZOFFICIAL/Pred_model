@@ -16,22 +16,165 @@ from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 import io
 
 st.set_page_config(
-    page_title="Lake Water Prediction & Analysis System",
-    page_icon="🌊",
-    layout="wide"
+    page_title="Lake Intelligence | Geospatial Analysis",
+    page_icon="L",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# Custom Styling for modern dark UI
+# Application design system: restrained, research-oriented and accessible.
 st.markdown("""
 <style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
-    h1, h2, h3 { color: #58a6ff; }
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+:root {
+    --ink: #172b3a;
+    --muted: #647687;
+    --line: #e2e8ed;
+    --surface: #ffffff;
+    --canvas: #f4f7f8;
+    --accent: #087e83;
+    --accent-dark: #06666b;
+    --accent-soft: #e7f3f2;
+}
+html, body, [class*="css"] {
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ink);
+}
+.stApp, [data-testid="stAppViewContainer"] { background: var(--canvas); }
+[data-testid="stHeader"] { background: rgba(244,247,248,.92); }
+.block-container { max-width: 1480px; padding: 2.2rem 3rem 3.5rem; }
+h1, h2, h3, h4 {
+    color: var(--ink) !important;
+    font-family: "Manrope", "DM Sans", sans-serif !important;
+    letter-spacing: -.035em;
+}
+h1 { font-size: 2.05rem !important; font-weight: 800 !important; margin-bottom: .35rem !important; }
+h2 { font-size: 1.42rem !important; font-weight: 700 !important; }
+h3 { font-size: 1.08rem !important; font-weight: 700 !important; }
+p, label, li { color: #34495a; }
+[data-testid="stCaptionContainer"] p, .stCaption { color: var(--muted) !important; }
+[data-testid="stSidebar"] {
+    background: #ffffff;
+    border-right: 1px solid var(--line);
+}
+[data-testid="stSidebar"] > div:first-child { padding-top: 1.25rem; }
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 { color: var(--ink) !important; }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { font-size: .88rem; }
+[data-testid="stMetric"] {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 1px 2px rgba(20,40,55,.025);
+}
+[data-testid="stMetricLabel"] p {
+    color: var(--muted) !important;
+    font-size: .78rem !important;
+    font-weight: 600 !important;
+}
+[data-testid="stMetricValue"] {
+    color: var(--ink) !important;
+    font-family: "Manrope", sans-serif;
+    font-size: 1.55rem !important;
+    font-weight: 700 !important;
+}
+[data-testid="stMetricDelta"] { font-size: .78rem !important; }
+.stTabs [data-baseweb="tab-list"] {
+    gap: .35rem;
+    border-bottom: 1px solid var(--line);
+}
+.stTabs [data-baseweb="tab"] {
+    height: 3.1rem;
+    padding: 0 1rem;
+    color: #607282;
+    font-weight: 600;
+    background: transparent;
+}
+.stTabs [aria-selected="true"] {
+    color: var(--accent-dark) !important;
+    border-bottom: 2px solid var(--accent) !important;
+}
+.stButton > button, .stDownloadButton > button {
+    border-radius: 7px;
+    border: 1px solid #cbd7dc;
+    min-height: 2.55rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: #ffffff;
+    transition: background .15s ease, border-color .15s ease;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+    background: #f4fbfa;
+}
+.stButton > button[kind="primary"] {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.stButton > button[kind="primary"]:hover {
+    background: var(--accent-dark);
+    border-color: var(--accent-dark);
+    color: #ffffff;
+}
+[data-testid="stAlert"] { border-radius: 8px; border-width: 1px; }
+[data-testid="stExpander"] {
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+}
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+}
+[data-baseweb="select"] > div, [data-baseweb="input"] > div,
+[data-baseweb="textarea"] > div {
+    border-radius: 7px;
+    border-color: #d5dfe4;
+}
+hr { border-color: var(--line); }
+[data-testid="stVerticalBlock"] > [data-testid="stImage"] img {
+    border-radius: 8px;
+}
+.app-kicker {
+    color: var(--accent) !important;
+    font-size: .7rem !important;
+    font-weight: 700 !important;
+    letter-spacing: .13em !important;
+    text-transform: uppercase;
+    margin-bottom: .45rem !important;
+}
+.app-subtitle {
+    color: var(--muted) !important;
+    font-size: .98rem !important;
+    max-width: 850px;
+    line-height: 1.6;
+    margin-bottom: 1.35rem !important;
+}
+.section-meta {
+    color: var(--muted);
+    font-size: .78rem;
+    letter-spacing: .04em;
+}
+@media (max-width: 900px) {
+    .block-container { padding: 1.3rem 1rem 2rem; }
+    h1 { font-size: 1.65rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌊 Lake Water AI Prediction & Analysis Dashboard")
-st.markdown("Satellite water-extent analysis, spectral diagnostics, geospatial measurements and validated model workflows.")
+st.markdown('<p class="app-kicker">Geospatial intelligence · Research workspace</p>', unsafe_allow_html=True)
+st.title("Lake Intelligence")
+st.markdown(
+    '<p class="app-subtitle">Satellite-derived water extent, spectral diagnostics and temporal analysis for Jakkur Lake. '
+    'Explore historical scenes, review spatial measurements and inspect model-based forecasts.</p>',
+    unsafe_allow_html=True,
+)
+st.divider()
 
 processor = LakeDataProcessor()
 tif_files = processor.tif_files
@@ -89,7 +232,7 @@ def get_base_raster_for_selection(year_str, month_str):
     return tif_files[0] if tif_files else None
 
 # Sidebar Controls for Map Selection
-st.sidebar.header("🗺️ View Historical / Current Map")
+st.sidebar.header("Scene explorer")
 side_lake = st.sidebar.selectbox("Lake / Site", ["Jakkur Lake"], key="side_lake")
 st.sidebar.caption("Only Jakkur Lake is represented by the committed raster archive. Other sites can be enabled when their scenes are added.")
 side_year = st.sidebar.selectbox("Year", ["2022", "2023", "2024", "2025"], key="side_year")
@@ -97,7 +240,7 @@ side_month = st.sidebar.selectbox("Month", months, index=0, key="side_month")
 
 current_tif = get_base_raster_for_selection(side_year, side_month)
 filename = os.path.basename(current_tif) if current_tif else "N/A"
-st.sidebar.info(f"📂 Active File: `{filename}`")
+st.sidebar.caption(f"Active raster: `{filename}`")
 
 if current_tif and os.path.exists(current_tif):
     arr, pixel_area_m2, crs = processor.load_tif(current_tif)
@@ -106,10 +249,10 @@ if current_tif and os.path.exists(current_tif):
     metrics = processor.compute_water_metrics(arr, binary_water, pixel_area_m2)
 
     tab1, tab2, tab3, tab4 = st.tabs([
-        "🗺️ Visualizations, Spectral Maps & Histogram",
-        "📐 Area & Water Volume Analytics",
-        "🔮 Future / Custom Year-Month Prediction",
-        "🛰️ Raw Spectrum to NDWI Converter & Processor"
+        "Raster analysis",
+        "Area analytics",
+        "Forecasting",
+        "Spectral processing"
     ])
 
     with tab1:
@@ -158,7 +301,7 @@ if current_tif and os.path.exists(current_tif):
             fig4.colorbar(im4, ax=ax4, label='Intensity')
             st.pyplot(fig4)
 
-            st.markdown("### 📈 Otsu & Threshold Statistics")
+            st.markdown("### Threshold statistics")
             st.markdown(f"""
             - **Otsu Threshold Value:** `{thresh:.4f}`
             - **Total Valid Pixels:** `{total_valid:,}`
@@ -389,7 +532,7 @@ if current_tif and os.path.exists(current_tif):
         )
 
     with tab4:
-        st.subheader("🛰️ Multi-Spectral to Processed NDWI Converter & Engine")
+        st.subheader("Multispectral processing")
         st.markdown("""
         Relative NDWI classes are spectral ranks, not physical depth measurements. Volume is not reported without measured bathymetry.
 
@@ -408,10 +551,10 @@ if current_tif and os.path.exists(current_tif):
             input_mode = st.radio(
                 "Input Mode",
                 [
-                    "🌟 Demonstration Dataset (Jakkur Lake Multi-Spectral Bands)",
-                    "📁 Local Directory of Spectral Bands",
-                    "📤 Upload Individual Spectral Bands (.tif)",
-                    "📦 Multi-Band Composite GeoTIFF (.tif)"
+                    "Demonstration dataset (Jakkur Lake)",
+                    "Local directory of spectral bands",
+                    "Upload individual spectral bands (.tif)",
+                    "Multi-band composite GeoTIFF (.tif)"
                 ],
                 key="conv_input_mode"
             )
@@ -420,7 +563,7 @@ if current_tif and os.path.exists(current_tif):
             multiband_file = None
             preset_choice = 'auto'
 
-            if input_mode == "🌟 Demonstration Dataset (Jakkur Lake Multi-Spectral Bands)":
+            if input_mode == "Demonstration dataset (Jakkur Lake)":
                 demo_dir = "sample_spectral_data"
                 if not os.path.exists(demo_dir) or not os.path.exists(os.path.join(demo_dir, "Jakkur_2022_B03_Green.tif")):
                     from scripts.create_sample_spectra import generate_sample_bands
@@ -434,7 +577,7 @@ if current_tif and os.path.exists(current_tif):
                 }
                 st.info(f"Loaded 5 spectral bands from `{demo_dir}/` (Green 10m, NIR 10m, Red 10m, SWIR 20m, Blue 10m).")
 
-            elif input_mode == "📁 Local Directory of Spectral Bands":
+            elif input_mode == "Local directory of spectral bands":
                 target_dir = st.text_input("Local Folder Path", value="sample_spectral_data", key="local_dir_input")
                 if os.path.exists(target_dir):
                     detected = sp_processor.auto_detect_bands_in_directory(target_dir)
@@ -443,7 +586,7 @@ if current_tif and os.path.exists(current_tif):
                 else:
                     st.error("Directory not found.")
 
-            elif input_mode == "📤 Upload Individual Spectral Bands (.tif)":
+            elif input_mode == "Upload individual spectral bands (.tif)":
                 up_green = st.file_uploader("Green Band (.tif) [Required for NDWI/MNDWI]", type=['tif', 'tiff'], key="up_green")
                 up_nir = st.file_uploader("NIR Band (.tif) [Required for NDWI/NDVI]", type=['tif', 'tiff'], key="up_nir")
                 up_red = st.file_uploader("Red Band (.tif) [Optional / Required for NDVI/NDTI]", type=['tif', 'tiff'], key="up_red")
@@ -467,7 +610,7 @@ if current_tif and os.path.exists(current_tif):
                 if up_swir: band_paths['swir1'] = save_uploaded(up_swir, "custom_swir")
                 if up_blue: band_paths['blue'] = save_uploaded(up_blue, "custom_blue")
 
-            elif input_mode == "📦 Multi-Band Composite GeoTIFF (.tif)":
+            elif input_mode == "Multi-band composite GeoTIFF (.tif)":
                 mb_choice = st.radio("Multi-Band Source", ["Use Demo 4-Band PlanetScope Composite", "Upload Multi-Band .tif"], key="mb_choice")
                 if mb_choice == "Use Demo 4-Band PlanetScope Composite":
                     multiband_file = os.path.join("sample_spectral_data", "Jakkur_2022_4Band_PlanetScope_Composite.tif")
@@ -513,7 +656,7 @@ if current_tif and os.path.exists(current_tif):
             apply_morph = st.checkbox("Apply Morphological Filter (Patch cleanup & hole filling)", value=True, key="apply_morph")
             target_out_name = st.text_input("Output Raster Filename", value=f"NDWI_PROCESSED_{side_lake.split()[0].upper()}.tif", key="target_out_name")
 
-            convert_button = st.button("🚀 Process Multi-Spectral Bands to NDWI", key="conv_btn")
+            convert_button = st.button("Process spectral bands", key="conv_btn")
 
         if convert_button or 'last_conv_results' in st.session_state:
             if convert_button:
@@ -619,7 +762,7 @@ if current_tif and os.path.exists(current_tif):
                     save_name = st.session_state.get('last_conv_out_name', 'NDWI_NEW_CONVERTED.tif')
                     if not save_name.endswith(('.tif', '.tiff')):
                         save_name += '.tif'
-                    if st.button(f"📥 Save `{save_name}` to Project Root", key="save_to_root"):
+                    if st.button(f"Save `{save_name}` to project root", key="save_to_root"):
                         out_fpath = os.path.join(".", save_name)
                         sp_processor.export_geotiff(
                             data_arr=res['index_raster'],
@@ -640,7 +783,7 @@ if current_tif and os.path.exists(current_tif):
                     with open(mem_tif_path, "rb") as f:
                         tif_bytes = f.read()
                     st.download_button(
-                        label="⬇️ Download Processed NDWI GeoTIFF",
+                        label="Download processed NDWI GeoTIFF",
                         data=tif_bytes,
                         file_name=save_name,
                         mime="image/tiff",
@@ -653,7 +796,7 @@ if current_tif and os.path.exists(current_tif):
                     buf = io.BytesIO()
                     diag_fig.savefig(buf, format="png", dpi=200, bbox_inches='tight')
                     st.download_button(
-                        label="⬇️ Download 8-Panel Analysis Report (PNG)",
+                        label="Download 8-panel analysis report (PNG)",
                         data=buf.getvalue(),
                         file_name="NDWI_Spectral_Analysis_Report.png",
                         mime="image/png",
