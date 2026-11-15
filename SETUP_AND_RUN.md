@@ -49,21 +49,23 @@ Resolve failures before training.
 
 ## 4. Understand the committed starter dataset
 
-The repository currently contains:
-- 11 single-band seasonal NDWI GeoTIFFs for Jakkur Lake.
-- `NDWI_pixel_depth_dataset.csv` with 87,901 rows and 7,991 rows for each of the 11 scenes.
-- CSV columns: `image,row,column,x,y,NDWI,water,depth_class,depth_label`.
+Unzip the supplied `Jakkur_lake_datasets.zip` into the project root. It creates `Jakkur_lake_datasets/` containing:
+- 11 single-band seasonal NDWI GeoTIFFs for 2022–2025;
+- `NDWI_pixel_depth_dataset.csv` with 87,901 rows (7,991 rows per scene);
+- the CSV columns `image,row,column,x,y,NDWI,water,depth_class,depth_label`.
 
-The CSV provides the training targets. The audit reports 100% coverage of each scene's valid raster pixels. The number of CSV rows is smaller than the rectangular raster pixel count because NoData/masked cells are excluded. Keep all existing rows when adding new labels.
+The supplied GeoTIFFs are 97 × 162 pixels (15,714 grid cells), EPSG:4326, and share the same affine transform. The CSV is not full-raster coverage: it has 7,991 coordinates per date. The reviewed blue lake ROI contains 4,489 pixels, of which 4,487 have CSV labels per scene. The remaining 3,504 CSV rows per scene are outside the lake ROI and are excluded before training, even if their original CSV label says water. Two pixels in the ROI are unlabelled and remain masked from the supervised loss.
 
-The current sequence has a missing `SEP_DEC_24` scene. The trainer skips temporal windows crossing that gap; it does not fabricate an image or interpolate a missing acquisition. Add the genuine missing scene if it becomes available.
+The checked-in `data/jakkur_lake_boundary.json` is a spatial analysis ROI derived from your blue annotation. It is not an always-wet mask: per-scene CSV labels determine water versus non-water inside the ROI, so seasonal changes remain possible. Surrounding plants/buildings and the two enclosed land islands are excluded from training, area measurements and forecasts.
+
+The supplied sequence is missing `SEP_DEC_24`; `SEP_DEC_25` is present. The trainer skips temporal windows crossing that gap and does not fabricate the missing acquisition.
 
 ## 5. Audit before training
 
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
+.\.venv\Scripts\python.exe -m src.dataset_audit --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
 ```
 
 Open `dataset_audit_report.json`. Confirm:
@@ -72,9 +74,38 @@ Open `dataset_audit_report.json`. Confirm:
 - all scenes use the same width, height, CRS and affine transform;
 - CSV labels are valid and mapped to the expected filenames;
 - missing seasonal periods are understood;
+- the Jakkur boundary maps to the raster grid and its per-scene ROI coverage is reported;
 - consecutive training windows are sufficient.
 
-The audit distinguishes CSV supervision from Otsu/quantile pseudo-label fallback. The current CSV is the preferred source. Pseudo-labels are only a fallback for a scene without usable CSV labels; they are not independent ground truth.
+The audit distinguishes CSV supervision from Otsu/quantile pseudo-label fallback. The supplied CSV is algorithm-derived, not independent field ground truth. The loader intersects old CSV coordinates with the Jakkur ROI, so pre-existing outside-lake water labels cannot leak into training.
+
+
+
+## 5A. Generate lake-aware pixel labels for current and future TIFFs
+
+The reusable generator replaces the older notebook-only pixel script. It scans dated `NDWI_*.tif` and `NDWI_*.tiff` inputs, applies the reviewed Jakkur ROI **before** thresholding, and writes rows only for valid pixels inside that ROI. Outside-lake pixels are omitted rather than taught as water or land. The two enclosed land islands remain outside the ROI.
+
+To regenerate labels for the supplied scenes without overwriting the original CSV:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_lake_roi.csv --write-masks
+```
+
+The generator writes a CSV with the same nine columns as the existing dataset and georeferenced QA masks under `generated_masks/`. Pixels outside the ROI are marked NoData (255) in the QA rasters. Review the generated masks before using the new CSV for retraining.
+
+For a future date, add its correctly named NDWI TIFF to `Jakkur_lake_datasets/` and run the same command. Automatic discovery selects only single-band files whose names begin with `NDWI_`. For a differently named file, pass it explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.dataset_generator --input Jakkur_lake_datasets\custom_scene.tif --output-csv Jakkur_lake_datasets\custom_scene_labels.csv --write-masks
+```
+
+Use `--threshold zero` or `--threshold -0.12` only when the cutoff is supported by the sensor/product and reviewed labels; the default is Otsu calculated only from valid pixels inside the ROI. Use `--no-lake-boundary` only for a different site with a different independently prepared boundary. Future Jakkur images must overlap the reference footprint; a raster with no meaningful overlap fails with an explicit error instead of silently generating unrelated labels.
+
+For training with the freshly generated CSV, pass its basename to the trainer:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.trainer --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset_lake_roi.csv --output-dir knowledge_base --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
+```
 
 ## 6. Build or update the knowledge base
 
@@ -88,7 +119,7 @@ The knowledge base is local and append-only. It stores:
 For a first run, the trainer ingests automatically. You can explicitly ingest first if you want to inspect the archive:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --archive-dir knowledge_base
+.\.venv\Scripts\python.exe -m src.knowledge_base --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv --archive-dir knowledge_base
 ```
 
 Do not manually edit or delete files under `knowledge_base/`. Back up the entire folder before major changes.
@@ -101,7 +132,7 @@ For the first training run or a new feature schema, use a full retrain:
 .\.venv\Scripts\python.exe -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output-dir knowledge_base --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01
 ```
 
-The current temporal U-Net uses six input channels:
+All temporal training and prediction calls apply the checked-in Jakkur ROI. This also filters legacy CSV labels that include pixels outside the lake. The current temporal U-Net uses six input channels:
 1. NDWI at t-2;
 2. NDWI at t-1;
 3. signed NDWI change;
