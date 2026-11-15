@@ -65,12 +65,16 @@ class LakeDataProcessor:
             valid &= arr != src.nodata
         return valid
 
-    def load_tif(self, file_path):
-        """Read a raster and calculate representative pixel area in square metres."""
+    def load_tif(self, file_path, apply_lake_boundary=False, boundary_path=None):
+        """Read a raster and calculate pixel area; optionally clip analysis to Jakkur's lake ROI."""
         with rasterio.open(file_path) as src:
             raw = src.read(1).astype(np.float32)
             arr = raw.copy()
-            arr[~self._valid_mask(src, raw)] = np.nan
+            valid = self._valid_mask(src, raw)
+            if apply_lake_boundary:
+                from src.lake_boundary import load_lake_boundary_mask
+                valid &= load_lake_boundary_mask(raw.shape, src.transform, src.crs, boundary_path)
+            arr[~valid] = np.nan
             crs, transform = src.crs, src.transform
             if crs is None:
                 raise ValueError(f"{file_path} has no CRS; pixel area is unknown.")
@@ -96,9 +100,14 @@ class LakeDataProcessor:
         return arr, float(pixel_area), crs
 
     @staticmethod
-    def compute_otsu_threshold(arr):
-        """Apply Otsu to finite values; invalid pixels are never classified as water."""
+    def compute_otsu_threshold(arr, spatial_mask=None):
+        """Apply Otsu to finite pixels, optionally restricted to a site ROI."""
         valid = np.isfinite(arr)
+        if spatial_mask is not None:
+            spatial_mask = np.asarray(spatial_mask, dtype=bool)
+            if spatial_mask.shape != arr.shape:
+                raise ValueError("Spatial mask must match the NDWI raster shape.")
+            valid &= spatial_mask
         values = arr[valid]
         if values.size == 0:
             return 0.0, np.zeros(arr.shape, dtype=bool), 0, 0
