@@ -35,13 +35,13 @@ python -m unittest discover -s tests -v
 
 ## Train the multi-task temporal U-Net
 
-Keep dated NDWI GeoTIFFs in the project root. Filenames must include a year and
-one of JAN_APR, MAY_AUG or SEP_DEC. The pixel CSV should contain the columns
-image, row, column, water and depth_class, as produced by the dataset-generation
-script.
+Keep dated NDWI GeoTIFFs in `Jakkur_lake_datasets/`. Filenames must include a
+year and one of JAN_APR, MAY_AUG or SEP_DEC. The pixel CSV should contain the
+columns image, row, column, water and depth_class, as produced by the
+lake-aware dataset generator.
 
 ```bash
-python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
+python -m src.trainer --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2
 ```
 
 The trainer creates a chronological validation holdout by target scene before
@@ -52,13 +52,31 @@ and derives class-balanced loss weights for both water and relative-class heads 
 - knowledge_base/ndwi_multitask_best.keras
 - knowledge_base/multitask_training_report.json
 
-The current repository includes 11 dated NDWI GeoTIFF scenes and a pixel CSV
-with 87,901 labelled rows (7,991 rows per scene). Each raster has 7,991 valid
-pixels and the CSV covers all of them; the remaining raster cells are NoData.
-The trainer also supports partially labelled future scenes by masking
-unlabelled pixels out of the loss. Otsu/quantile pseudo-labels are used only
-when a scene has no usable CSV labels. The report records label provenance and
-per-scene coverage.
+The supplied Jakkur archive contains 11 dated NDWI GeoTIFF scenes and a pixel
+CSV with 87,901 rows (7,991 rows per scene). The GeoTIFFs are 97 × 162 pixels
+(15,714 grid cells) in EPSG:4326 on a common grid. The checked-in
+`data/jakkur_lake_boundary.json` represents the user-reviewed lake ROI
+(4,489 pixels, including two excluded internal land islands). Of each scene's
+7,991 legacy CSV rows, 4,487 intersect that ROI; the other 3,504 per scene are
+outside-lake labels and are ignored by temporal training. The ROI is a spatial
+constraint, not a permanently wet-water mask: seasonal water/non-water labels
+inside the ROI still come from the scene's pixel CSV.
+
+Generate fresh, lake-aware pixel labels from current or future NDWI TIFFs with:
+
+```bash
+python -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_lake_roi.csv --write-masks
+```
+
+The generator exports the existing nine-column CSV schema and optional
+georeferenced QA masks. Outside-ROI pixels are omitted from the CSV and marked
+NoData in the QA rasters. Explicitly named inputs can also be passed with
+`--input`; automatic discovery selects single-band files named
+`NDWI_*.tif` or `NDWI_*.tiff`. The trainer and predictor both apply the same
+spatial ROI, including to legacy CSVs and model outputs. Partially labelled
+pixels remain masked out of the loss. Otsu/quantile pseudo-labels are a
+fallback only for scenes without usable CSV labels, and are calculated inside
+the ROI. The report records label provenance and per-scene coverage.
 
 ## Open the dashboard after training
 
@@ -105,7 +123,7 @@ idempotent; it does not create another scene. New label rows for an already
 archived raster are merged by pixel coordinate, with the latest row retained.
 
 ```bash
-python -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv
+python -m src.knowledge_base --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv
 # Or specify files explicitly:
 python -m src.knowledge_base --images path/to/NDWI_JAN_APR_26.tif --dataset-csv NDWI_pixel_depth_dataset.csv
 ```
@@ -174,7 +192,7 @@ identical raster bytes and retains versioned model candidates. See
 
 ## Dataset audit
 
-Run `python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv`
+Run `python -m src.dataset_audit --data-dir Jakkur_lake_datasets --dataset-csv NDWI_pixel_depth_dataset.csv`
 before training. It checks GeoTIFF metadata and grid consistency, missing
 seasonal periods, label coverage, pseudo-label fallbacks and consecutive
 training windows. Resolve errors and review warnings in
