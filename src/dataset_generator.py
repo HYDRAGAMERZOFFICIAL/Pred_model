@@ -1,9 +1,8 @@
-"""Reusable pixel-wise NDWI dataset generator with an optional Jakkur Lake ROI.
+"""Generate full-extent water/land pixel labels from single-band NDWI GeoTIFFs.
 
-This generator writes one row per valid pixel inside the spatial ROI. The ROI
-separates the lake basin from outside vegetation/buildings; per-scene NDWI
-thresholding then labels water/non-water within that basin. Relative classes
-are NDWI ranks, not measured bathymetric depth.
+Finite pixels inside the raster footprint are classified using an explicit or
+per-scene Otsu threshold. NaN/NoData pixels are excluded, never interpreted as
+water. Relative classes are NDWI ranks, not measured bathymetric depth.
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from rasterio.transform import xy
 from skimage.filters import threshold_otsu
 
 from src.data_processor import resolve_data_dir
-from src.raster_semantics import classify_water_land
+from src.raster_semantics import classify_water_land, render_classification_rgb
 
 
 CLASS_NAMES = {0: "Non-water", 1: "Shallow", 2: "Moderate", 3: "Deep"}
@@ -92,11 +91,10 @@ def process_ndwi_tif(
     boundary_path: str | None = None,
     threshold_method: str | float = "otsu",
 ):
-    """Build labels for one dated single-band NDWI raster.
+    """Build water/land labels for every valid pixel in one full-extent NDWI raster.
 
-    The output label_valid mask is valid-data AND lake ROI. Outside ROI pixels
-    are omitted from CSV entirely, not emitted as non-water labels. This avoids
-    teaching the model that arbitrary non-lake pixels are part of this lake.
+    Pixels outside the raster's valid footprint remain NoData; the image is
+    never cropped to the earlier incorrectly interpreted blue polygon.
     """
     with rasterio.open(image_path) as src:
         if src.count != 1:
@@ -109,14 +107,13 @@ def process_ndwi_tif(
             raise ValueError(f"{image_path} has no CRS; cannot align the lake ROI.")
         if lake_boundary:
             raise ValueError(
-                "The earlier hand-drawn blue ROI was based on an incorrect interpretation "
-                "and is disabled. Process the complete valid raster footprint instead."
+                "The earlier hand-drawn blue ROI was incorrect and is disabled. Process the complete valid raster footprint instead."
             )
         roi = np.ones(image.shape, dtype=bool)
         label_domain = valid
 
     if not label_domain.any():
-        raise ValueError(f"No valid pixels inside the lake ROI for {image_path}.")
+        raise ValueError(f"No valid finite NDWI pixels in {image_path}.")
 
     if str(threshold_method).lower() == "otsu":
         threshold = _otsu_in_domain(image, label_domain)
@@ -184,7 +181,7 @@ def generate_dataset(
     write_masks=False,
     mask_output_dir="generated_masks",
 ):
-    """Generate a combined CSV from one or more future NDWI TIFF scenes."""
+    """Generate a combined pixel-label CSV and optional full-extent QA images."""
     paths = [str(path) for path in input_paths]
     if not paths:
         raise ValueError("No input TIFF files were supplied.")
@@ -198,8 +195,9 @@ def generate_dataset(
         reports.append({
             "image": os.path.basename(path),
             "valid_raster_pixels": int(result["valid_mask"].sum()),
-            "lake_roi_pixels": int(result["lake_roi"].sum()),
+            "raster_grid_pixels": int(result["lake_roi"].size),
             "labelled_pixels": int(result["label_domain"].sum()),
+            "nodata_pixels": int(result["nodata_mask"].sum()),
             "water_pixels": int(np.count_nonzero(result["water_mask"] == 1)),
             "non_water_pixels": int(np.count_nonzero(result["water_mask"] == 0)),
             "threshold": float(result["threshold"]),
@@ -214,6 +212,14 @@ def generate_dataset(
             depth_profile.update(count=1, dtype="uint8", nodata=255, compress="deflate")
             with rasterio.open(os.path.join(mask_output_dir, f"{name}_relative_classes.tif"), "w", **depth_profile) as dst:
                 dst.write(result["depth_map"], 1)
+            rgb, _ = render_classification_rgb(
+                result["meta"] and rasterio.open(path).read(1),
+                valid_mask=result["valid_mask"], mode="fixed", threshold=result["threshold"],
+            )
+            from PIL import Image
+            Image.fromarray(rgb, mode="RGB").save(
+                os.path.join(mask_output_dir, f"{name}_water_land.png")
+            )
 
     combined = pd.concat(frames, ignore_index=True)
     # Do not duplicate a pixel from the same scene; deterministic file basename is key.
