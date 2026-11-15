@@ -298,7 +298,7 @@ class SpectrumNDWIProcessor:
                            resampling: Resampling = Resampling.bilinear,
                            threshold_method: Union[str, float] = 'otsu',
                            min_water_patch_pixels: int = 4,
-                           max_hole_pixels: int = 4,
+                           max_hole_pixels: int = 0,
                            lake_boundary: bool = False,
                            boundary_path: Optional[str] = None) -> dict:
         """
@@ -434,7 +434,7 @@ class SpectrumNDWIProcessor:
                                index_type: str = 'NDWI',
                                threshold_method: Union[str, float] = 'otsu',
                                min_water_patch_pixels: int = 4,
-                               max_hole_pixels: int = 4,
+                               max_hole_pixels: int = 0,
                                lake_boundary: bool = False,
                                boundary_path: Optional[str] = None) -> dict:
         """
@@ -555,7 +555,7 @@ class SpectrumNDWIProcessor:
                            apply_morphology: bool = True,
                            threshold_method: Union[str, float] = 'otsu',
                            min_water_patch_pixels: int = 4,
-                           max_hole_pixels: int = 4) -> dict:
+                           max_hole_pixels: int = 0) -> dict:
         """
         Applies thresholding (dynamic Otsu or zero/custom threshold),
         connected-component cleanup (small patch removal and hole filling),
@@ -940,8 +940,8 @@ def build_cli() -> argparse.ArgumentParser:
                         help="Water cutoff method: 'otsu' (dynamic), 'zero' (NDWI > 0), or float value (default: otsu)")
     parser.add_argument('--min-patch', type=int, default=4,
                         help="Minimum water patch in pixels to keep (removes noise specks, default: 4)")
-    parser.add_argument('--max-hole', type=int, default=4,
-                        help="Maximum enclosed land hole in pixels to fill (default: 4)")
+    parser.add_argument('--max-hole', type=int, default=0,
+                        help="Maximum enclosed land hole in pixels to fill (default: 0; preserve all land islands)")
     # Outputs
     parser.add_argument('--output', '-o', type=str, default='processed_NDWI.tif',
                         help="Output path for processed NDWI GeoTIFF (default: processed_NDWI.tif)")
