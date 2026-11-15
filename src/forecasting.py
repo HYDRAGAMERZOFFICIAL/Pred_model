@@ -8,7 +8,7 @@ from src.temporal_learning import discover_ndwi_rasters, temporal_sort_key
 from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 
-def forecast_annual_water_area(data_dir=None, lake_boundary=True, boundary_path=None):
+def forecast_annual_water_area(data_dir=None, lake_boundary=False, boundary_path=None):
     """Project annual mean seasonal Jakkur water area within the reviewed lake ROI.
 
     Set lake_boundary=False only when using this module for another study site.
