@@ -389,6 +389,7 @@ def predict_lake_for_date(
         "water_area_m2": area_m2,
         "water_area_km2": area_m2 / 1_000_000 if area_m2 is not None else None,
         "valid_pixels": int(valid_output.sum()),
+        "valid_mask": valid_output,
         "water_probability": water_probability,
         "relative_classes": predicted_classes,
         "ground_truth_available": ground_truth_available,

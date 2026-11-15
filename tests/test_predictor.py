@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch, MagicMock
 
 import numpy as np
 import rasterio
@@ -123,6 +124,42 @@ class TestPredictorPixelArea(unittest.TestCase):
                 stream.write('{"patch_size": 64, "deployment_eligible": false}')
             with self.assertRaisesRegex(RuntimeError, "persistence-baseline"):
                 predict_lake_for_date(2026, "March", data_dir=tmp, model_dir=model_dir, output_dir=os.path.join(tmp, "out"))
+
+    def test_predict_lake_for_date_result_contains_valid_mask(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # Create synthetic raster files
+            paths = []
+            for name in ["NDWI_JAN_APR_22.tif", "NDWI_MAY_AUG_22.tif", "NDWI_SEP_DEC_22.tif"]:
+                p = os.path.join(tmp, name)
+                with rasterio.open(
+                    p, "w", driver="GTiff", height=4, width=4, count=1,
+                    dtype="float32", crs="EPSG:32643", transform=from_origin(100, 100, 10, 10)
+                ) as dst:
+                    dst.write(np.zeros((4, 4), dtype=np.float32), 1)
+                paths.append(p)
+
+            model_dir = os.path.join(tmp, "models")
+            os.makedirs(model_dir)
+            with open(os.path.join(model_dir, "ndwi_multitask_unet.keras"), "wb") as stream:
+                stream.write(b"model")
+            with open(os.path.join(model_dir, "multitask_training_report.json"), "w", encoding="utf-8") as stream:
+                json.dump({"patch_size": 4, "deployment_eligible": True, "input_channels": 4}, stream)
+
+            mock_valid = np.ones((4, 4), dtype=bool)
+            mock_prob = np.full((4, 4), 0.7, dtype=np.float32)
+            mock_class_prob = np.ones((4, 4, 4), dtype=np.float32)
+            mock_classes = np.ones((4, 4), dtype=np.uint8)
+            mock_water = np.ones((4, 4), dtype=bool)
+
+            with patch("tensorflow.keras.models.load_model") as mock_load, \
+                 patch("src.predictor._run_model_inference_on_pair", return_value=(mock_prob, mock_class_prob, mock_classes, mock_water, mock_valid)):
+                result = predict_lake_for_date(
+                    2023, "March", data_dir=tmp, model_dir=model_dir, output_dir=os.path.join(tmp, "out")
+                )
+                self.assertIn("valid_mask", result)
+                self.assertIsInstance(result["valid_mask"], np.ndarray)
+                self.assertEqual(result["valid_mask"].dtype, bool)
+                self.assertEqual(result["valid_mask"].shape, (4, 4))
 
 
 if __name__ == "__main__":
