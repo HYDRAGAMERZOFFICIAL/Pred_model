@@ -668,7 +668,7 @@ if current_tif and os.path.exists(current_tif):
                                 preset=preset_choice,
                                 index_type=selected_index,
                                 threshold_method=thresh_val_arg,
-                                lake_boundary=True,
+                                lake_boundary=False,
                             )
                         elif band_paths:
                             res = sp_processor.process_from_files(
@@ -676,7 +676,7 @@ if current_tif and os.path.exists(current_tif):
                                 index_type=selected_index,
                                 reference_band='green' if 'green' in band_paths else list(band_paths.keys())[0],
                                 threshold_method=thresh_val_arg,
-                                lake_boundary=True,
+                                lake_boundary=False,
                             )
                         else:
                             st.error("Please supply valid spectral bands.")
