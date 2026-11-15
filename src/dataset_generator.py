@@ -234,7 +234,7 @@ def generate_dataset(
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Generate lake-aware pixel labels from dated single-band NDWI GeoTIFFs.")
+    parser = argparse.ArgumentParser(description="Generate full-extent water/land pixel labels from dated NDWI GeoTIFFs.")
     parser.add_argument("--data-dir", default=None, help="Folder containing NDWI TIFFs (defaults to the Jakkur dataset folder).")
     parser.add_argument("--input", nargs="*", help="Explicit TIFF paths; overrides --data-dir discovery.")
     parser.add_argument("--recursive", action="store_true", help="Search the input folder recursively.")
