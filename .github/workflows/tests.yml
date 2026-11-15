@@ -36,4 +36,5 @@ jobs:
           python -m unittest discover -s tests -p 'test_predictor.py' -v
           python -m unittest discover -s tests -p 'test_dataset_audit.py' -v
           python -m unittest discover -s tests -p 'test_lake_boundary.py' -v
+          python -m unittest discover -s tests -p 'test_forecasting.py' -v
           python -m unittest discover -s tests -p 'test_spectrum_to_ndwi.py' -v
