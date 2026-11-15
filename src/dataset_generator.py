@@ -61,7 +61,7 @@ def _valid_pixels(src, image):
 def _otsu_in_domain(image, domain):
     values = image[domain]
     if values.size == 0:
-        raise ValueError("No valid NDWI pixels remain inside the selected lake analysis area.")
+        raise ValueError("No valid finite NDWI pixels remain in the raster footprint.")
     if np.ptp(values) <= np.finfo(np.float32).eps:
         threshold = float(values[0])
     else:
@@ -104,12 +104,11 @@ def process_ndwi_tif(
         transform, crs = src.transform, src.crs
         valid = _valid_pixels(src, image)
         if crs is None:
-            raise ValueError(f"{image_path} has no CRS; cannot align the lake ROI.")
+            raise ValueError(f"{image_path} has no CRS; georeferenced pixel coordinates cannot be exported.")
         if lake_boundary:
             raise ValueError(
                 "The earlier hand-drawn blue ROI was incorrect and is disabled. Process the complete valid raster footprint instead."
             )
-        roi = np.ones(image.shape, dtype=bool)
         label_domain = valid
 
     if not label_domain.any():
@@ -159,7 +158,6 @@ def process_ndwi_tif(
         "water_mask": binary,
         "depth_map": depth_output,
         "valid_mask": valid,
-        "lake_roi": roi,
         "land_mask": land_mask,
         "nodata_mask": nodata_mask,
         "label_domain": label_domain,
@@ -195,7 +193,7 @@ def generate_dataset(
         reports.append({
             "image": os.path.basename(path),
             "valid_raster_pixels": int(result["valid_mask"].sum()),
-            "raster_grid_pixels": int(result["lake_roi"].size),
+            "raster_grid_pixels": int(result["valid_mask"].size),
             "labelled_pixels": int(result["label_domain"].sum()),
             "nodata_pixels": int(result["nodata_mask"].sum()),
             "water_pixels": int(np.count_nonzero(result["water_mask"] == 1)),
