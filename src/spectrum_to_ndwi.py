@@ -569,7 +569,7 @@ class SpectrumNDWIProcessor:
                 'threshold_used': 0.0,
                 'water_mask': np.zeros_like(index_arr, dtype=np.uint8),
                 'depth_map': np.zeros_like(index_arr, dtype=np.uint8),
-                'metrics': {'area_m2': 0, 'area_km2': 0, 'volume_m3': 0, 'avg_depth_m': 0, 'water_pixels': 0},
+                'metrics': {'area_m2': 0, 'area_km2': 0, 'volume_m3': None, 'avg_depth_m': None, 'depth_source': 'Unavailable: NDWI is not a depth measurement', 'water_pixels': 0},
                 'stats': {'min': 0, 'max': 0, 'mean': 0, 'std': 0, 'valid_pixels': 0}
             }
 
@@ -666,20 +666,14 @@ class SpectrumNDWIProcessor:
         area_m2 = float(water_pixels_cnt * pixel_area_m2)
         area_km2 = float(area_m2 / 1e6)
 
-        # Heuristic lake depth estimation from index values
-        if water_pixels_cnt > 0:
-            avg_ndwi = float(np.mean(water_vals))
-            estimated_depth_m = float(np.clip(0.5 + (avg_ndwi - effective_threshold) * 4.0, 0.5, 4.0))
-        else:
-            estimated_depth_m = 0.0
-
-        volume_m3 = float(area_m2 * estimated_depth_m)
-
+        # NDWI measures spectral contrast, not bathymetric depth.
+        # Do not invent depth or volume from an index threshold.
         metrics = {
             'area_m2': area_m2,
             'area_km2': area_km2,
-            'volume_m3': volume_m3,
-            'avg_depth_m': estimated_depth_m,
+            'volume_m3': None,
+            'avg_depth_m': None,
+            'depth_source': 'Unavailable: NDWI is not a depth measurement',
             'water_pixels': water_pixels_cnt,
             'total_valid_pixels': total_valid,
             'water_coverage_pct': (water_pixels_cnt / total_valid * 100.0) if total_valid > 0 else 0.0,
