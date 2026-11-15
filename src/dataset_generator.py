@@ -37,7 +37,11 @@ def discover_input_tiffs(data_dir: str, recursive: bool = False):
     selected = []
     for path in paths:
         name = os.path.basename(path).lower()
-        if not name.endswith((".tif", ".tiff")) or any(token in name for token in excluded_tokens):
+        if (
+            not name.endswith((".tif", ".tiff"))
+            or not name.startswith("ndwi_")
+            or any(token in name for token in excluded_tokens)
+        ):
             continue
         try:
             with rasterio.open(path) as src:
