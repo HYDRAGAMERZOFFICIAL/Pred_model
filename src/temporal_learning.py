@@ -142,7 +142,7 @@ def _load_spectral_stack(path, reference_grid, reflectance_scale=10000.0):
 
 def load_temporal_scenes(
     raster_paths, dataset_csv=None, spectral_dir=None, reflectance_scale=10000.0,
-    lake_boundary=True, boundary_path=None,
+    lake_boundary=False, boundary_path=None,
 ):
     """Load aligned scenes, apply the Jakkur ROI and reconstruct pixel labels.
 
@@ -290,10 +290,10 @@ def _extract_sequence_patches(scenes, target_index, patch_size, stride, min_vali
 def prepare_temporal_training_data(
     raster_paths, dataset_csv=None, patch_size=64, stride=32,
     validation_sequences=2, min_valid_fraction=0.01, spectral_dir=None,
-    reflectance_scale=10000.0,
+    reflectance_scale=10000.0, lake_boundary=False, boundary_path=None,
 ):
     """Chronologically split target scenes before patch extraction."""
-    scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale)
+    scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale, lake_boundary, boundary_path)
     target_indices = consecutive_target_indices(scenes)
     if len(target_indices) < validation_sequences + 1:
         raise ValueError(
