@@ -48,10 +48,19 @@ class TestLakeDataProcessor(unittest.TestCase):
         from src.data_processor import resolve_data_dir, resolve_dataset_csv
         data_dir = resolve_data_dir()
         self.assertEqual(data_dir, "Jakkur_lake_datasets")
+        # The raster/CSV archive is intentionally excluded from Git because of
+        # file size. Verify it when a developer has unpacked the supplied ZIP;
+        # CI without that local archive should skip only this external-data check.
+        tiffs = [
+            name for name in os.listdir(data_dir)
+            if name.lower().endswith((".tif", ".tiff"))
+        ] if os.path.isdir(data_dir) else []
+        if not tiffs:
+            self.skipTest("Unpack Jakkur_lake_datasets.zip locally to run the external dataset check.")
         csv_path = resolve_dataset_csv()
         self.assertTrue(os.path.isfile(csv_path))
         ldp = LakeDataProcessor()
-        self.assertEqual(ldp.data_dir, "Jakkur_lake_datasets")
+        self.assertEqual(ldp.data_dir, data_dir)
         self.assertGreaterEqual(len(ldp.tif_files), 11)
 
 
