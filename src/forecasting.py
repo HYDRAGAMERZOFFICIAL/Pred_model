@@ -9,9 +9,8 @@ from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 
 def forecast_annual_water_area(data_dir=None, lake_boundary=False, boundary_path=None):
-    """Project annual mean seasonal Jakkur water area within the reviewed lake ROI.
+    """Project annual mean water area using all valid pixels in each NDWI raster.
 
-    Set lake_boundary=False only when using this module for another study site.
     This is an annual area trend, not a spatial raster forecast.
     """
     data_dir = resolve_data_dir(data_dir)
