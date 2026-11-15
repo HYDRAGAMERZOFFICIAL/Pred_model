@@ -340,7 +340,9 @@ if current_tif and os.path.exists(current_tif):
                 fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), dpi=150)
                 
                 # 1. Predicted Water Probability
-                im0 = axes[0].imshow(result["water_probability"], cmap="Blues", vmin=0.0, vmax=1.0)
+                probability_cmap = plt.get_cmap("Blues").copy()
+                probability_cmap.set_bad("#D9DEE7")
+                im0 = axes[0].imshow(result["water_probability"], cmap=probability_cmap, vmin=0.0, vmax=1.0)
                 prob_data = np.nan_to_num(result["water_probability"], nan=0.0)
                 if np.any(prob_data >= 0.5):
                     axes[0].contour(prob_data, levels=[0.5], colors=['#dc2626'], linewidths=1.6, linestyles='--')
@@ -357,7 +359,7 @@ if current_tif and os.path.exists(current_tif):
                 axes[1].imshow(np.ma.array(pred_water_binary, mask=~result['valid_mask']), cmap=cmap_water_binary, vmin=0, vmax=1)
                 patches_pred_binary = [
                     mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({result["valid_pixels"] - result["water_pixels"]:,} px)'),
-                    mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Predicted Water ({result["water_pixels"]:,} px)'),
+                    mpatches.Patch(facecolor='#2478C9', edgecolor='#185D9E', label=f'Predicted Water ({result["water_pixels"]:,} px)'),
                 ]
                 axes[1].legend(handles=patches_pred_binary, loc='lower right', framealpha=0.92, fontsize=7.5)
                 axes[1].set_title("2. Delineated Water Extent", fontsize=10, fontweight='bold', pad=8)
@@ -366,9 +368,9 @@ if current_tif and os.path.exists(current_tif):
                 axes[2].imshow(np.ma.array(result["relative_classes"], mask=~result['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3)
                 patches_pred_classes = [
                     mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
-                    mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
-                    mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
-                    mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
+                    mpatches.Patch(facecolor='#F2C14E', edgecolor='#C89D32', label='1: Shallow Water'),
+                    mpatches.Patch(facecolor='#2F81F7', edgecolor='#2367C6', label='2: Moderate Depth'),
+                    mpatches.Patch(facecolor='#0D419D', edgecolor='#082F70', label='3: Deep Water'),
                 ]
                 axes[2].legend(handles=patches_pred_classes, loc='lower right', framealpha=0.92, fontsize=7.5)
                 axes[2].set_title("3. Predicted Relative Classes", fontsize=10, fontweight='bold', pad=8)
@@ -754,7 +756,7 @@ if current_tif and os.path.exists(current_tif):
                     ax_d.imshow(np.ma.array(res['depth_map'], mask=~res['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3)
                     ax_d.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
                     patches_d = [
-                        mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
+                        mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
                         mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
                         mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
                         mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
