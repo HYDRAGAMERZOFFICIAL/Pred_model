@@ -35,9 +35,9 @@ class TestJakkurLakeBoundary(unittest.TestCase):
         self.assertLess(int(mask.sum()), 5500)
         # Two user-marked dry islands must not be part of the ROI.
         self.assertFalse(mask[72, 43])
-        self.assertFalse(mask[110, 41])
-        self.assertFalse(mask[110, 45])
-        self.assertTrue(mask[40, 48])
+        self.assertFalse(mask[78, 43])
+        self.assertFalse(mask[119, 42])
+        self.assertTrue(mask[60, 30])
         self.assertFalse(mask[10, 10])
 
     def test_generator_outputs_only_valid_pixels_inside_roi(self):
@@ -45,7 +45,7 @@ class TestJakkurLakeBoundary(unittest.TestCase):
             path = os.path.join(tmp, "NDWI_JAN_APR_26.tif")
             data = np.full((self.height, self.width), -0.4, dtype=np.float32)
             roi = load_lake_boundary_mask(data.shape, self.transform, self.crs)
-            data[roi] = 0.15
+            data[roi] = np.linspace(-0.1, 0.5, int(roi.sum()), dtype=np.float32)
             data[0, 0] = -9999
             self.write_scene(path, data)
             result = process_ndwi_tif(path)
@@ -53,10 +53,10 @@ class TestJakkurLakeBoundary(unittest.TestCase):
             self.assertEqual(len(rows), int(result["label_domain"].sum()))
             self.assertTrue((rows["row"] >= 0).all())
             self.assertTrue((rows["column"] >= 0).all())
-            self.assertTrue((rows["water"] == 1).all())
-            self.assertFalse(result["water_mask"][~roi].any())
-            self.assertFalse(result["label_domain"][72, 43])
-            self.assertFalse(result["label_domain"][110, 43])
+            self.assertTrue((rows["water"].isin([0, 1])).all())
+            self.assertTrue(np.all(result["water_mask"][~roi] == 255))
+            self.assertFalse(result["label_domain"][78, 43])
+            self.assertFalse(result["label_domain"][119, 42])
 
     def test_outside_roi_values_cannot_change_otsu_or_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
