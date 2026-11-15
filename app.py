@@ -154,7 +154,7 @@ if current_tif and os.path.exists(current_tif):
 
     with tab1:
         st.subheader(f"Analysis for {side_lake} — {side_month} {side_year}")
-        st.caption("Spatial analysis is clipped to the reviewed Jakkur Lake footprint. Surrounding vegetation, buildings and the two internal land islands are excluded.")
+        st.caption("The complete raster extent is displayed. Water is blue, land is green and outside-coverage pixels remain NoData.")
         col1, col2 = st.columns(2)
 
         with col1:
