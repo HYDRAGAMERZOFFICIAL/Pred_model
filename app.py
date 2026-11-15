@@ -60,8 +60,8 @@ tif_files = processor.tif_files
 csv_path = resolve_dataset_csv(dataset_dir)
 
 # Standardized scientific cartographic palettes
-cmap_water_binary = ListedColormap(['#e2e8f0', '#0284c7'])
-cmap_depth_4class = ListedColormap(['#e2e8f0', '#7dd3fc', '#0284c7', '#0c4a6e'])
+cmap_water_binary = ListedColormap(['#35A66B', '#2478C9'])
+cmap_depth_4class = ListedColormap(['#35A66B', '#F2C14E', '#2F81F7', '#0D419D'])
 
 with st.sidebar.expander("Project setup and model readiness", expanded=False):
     csv_ready = os.path.isfile(csv_path)
@@ -177,7 +177,7 @@ if current_tif and os.path.exists(current_tif):
             fig_bin, ax_bin = plt.subplots(figsize=(6, 4.5))
             ax_bin.imshow(binary_water, cmap=cmap_water_binary, vmin=0, vmax=1)
             patches_bin = [
-                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({total_valid - water_pixels:,} px)'),
+                mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({total_valid - water_pixels:,} px)'),
                 mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Water ({water_pixels:,} px)'),
             ]
             ax_bin.legend(handles=patches_bin, loc='lower right', framealpha=0.9, fontsize=8)
@@ -363,7 +363,7 @@ if current_tif and os.path.exists(current_tif):
                 # 3. Predicted Relative Classes
                 axes[2].imshow(result["relative_classes"], cmap=cmap_depth_4class, vmin=0, vmax=3)
                 patches_pred_classes = [
-                    mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
+                    mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
                     mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
                     mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
                     mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
