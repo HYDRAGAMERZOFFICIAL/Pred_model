@@ -245,10 +245,10 @@ def predict_lake_for_date(
             raise FileNotFoundError("This model requires archived multispectral stacks, but knowledge_base/archive/spectral is missing.")
         scenes = load_temporal_scenes(
             archived_paths, archived_labels, spectral_dir,
-            float(metadata.get("reflectance_scale", 10000.0)),
+            float(metadata.get("reflectance_scale", 10000.0)), lake_boundary=True,
         )
     else:
-        scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), csv_path if os.path.isfile(csv_path) else None)
+        scenes = load_temporal_scenes(discover_ndwi_rasters(data_dir), csv_path if os.path.isfile(csv_path) else None, lake_boundary=True)
 
     if len(scenes) < 3:
         raise ValueError("At least three dated NDWI scenes are required for prediction.")
