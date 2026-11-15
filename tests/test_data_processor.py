@@ -44,6 +44,42 @@ class TestLakeDataProcessor(unittest.TestCase):
             X, y = LakeDataProcessor(tmp).create_training_patches(8, 8)
             self.assertEqual((len(X), len(y)), (0, 0))
 
+    def test_legacy_patch_extractor_clips_to_jakkur_roi(self):
+        from rasterio.transform import Affine
+        from src.lake_boundary import load_lake_boundary_mask
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = os.path.join(tmp, "Jakkur_lake_datasets")
+            label_dir = os.path.join(data_dir, "labels")
+            os.makedirs(label_dir)
+            image_path = os.path.join(data_dir, "NDWI_JAN_APR_26.tif")
+            label_path = os.path.join(label_dir, "NDWI_JAN_APR_26_mask.tif")
+            shape = (162, 97)
+            transform = Affine(
+                0.0000898315360824157, 0, 77.606535373,
+                0, -0.00008983153086419803, 13.093574087,
+            )
+            roi = load_lake_boundary_mask(shape, transform, "EPSG:4326")
+            profile = {
+                "driver": "GTiff", "height": shape[0], "width": shape[1],
+                "count": 1, "dtype": "float32", "crs": "EPSG:4326",
+                "transform": transform, "nodata": -9999,
+            }
+            with rasterio.open(image_path, "w", **profile) as dst:
+                dst.write(np.full(shape, 0.2, dtype=np.float32), 1)
+            label_profile = profile.copy()
+            label_profile.update(dtype="uint8", nodata=255)
+            labels = np.ones(shape, dtype=np.uint8)
+            with rasterio.open(label_path, "w", **label_profile) as dst:
+                dst.write(labels, 1)
+
+            x, y = LakeDataProcessor(data_dir).create_training_patches(
+                patch_size=8, stride=8, label_dir=label_dir
+            )
+            self.assertGreater(len(x), 0)
+            self.assertTrue(np.all(y == 1))
+            self.assertEqual(x.shape[-1], 1)
+
     def test_default_resolves_to_jakkur_lake_datasets(self):
         from src.data_processor import resolve_data_dir, resolve_dataset_csv
         data_dir = resolve_data_dir()
