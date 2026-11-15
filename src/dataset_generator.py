@@ -121,7 +121,7 @@ def process_ndwi_tif(
     else:
         raise ValueError("threshold_method must be 'otsu', 'zero', or a numeric cutoff.")
 
-    water_mask = label_domain & (image > threshold)
+    water_mask = label_domain & (image >= threshold)
     depth_class, q33, q67 = _relative_classes(image, water_mask)
 
     rows, cols = np.where(label_domain)
@@ -142,14 +142,17 @@ def process_ndwi_tif(
     }, columns=CSV_COLUMNS)
 
     # A full-grid uint8 mask is useful for QA and remains georeferenced.
-    binary = np.zeros(image.shape, dtype=np.uint8)
+    binary = np.full(image.shape, 255, dtype=np.uint8)
+    binary[label_domain] = 0
     binary[water_mask] = 1
+    depth_output = np.full(image.shape, 255, dtype=np.uint8)
+    depth_output[label_domain] = depth_class[label_domain]
     mask_profile = meta.copy()
     mask_profile.update(count=1, dtype="uint8", nodata=255, compress="deflate")
     return {
         "dataset": frame,
         "water_mask": binary,
-        "depth_map": depth_class,
+        "depth_map": depth_output,
         "valid_mask": valid,
         "lake_roi": roi,
         "label_domain": label_domain,
@@ -186,8 +189,8 @@ def generate_dataset(
             "valid_raster_pixels": int(result["valid_mask"].sum()),
             "lake_roi_pixels": int(result["lake_roi"].sum()),
             "labelled_pixels": int(result["label_domain"].sum()),
-            "water_pixels": int(result["water_mask"].sum()),
-            "non_water_pixels": int(result["label_domain"].sum() - result["water_mask"].sum()),
+            "water_pixels": int(np.count_nonzero(result["water_mask"] == 1)),
+            "non_water_pixels": int(np.count_nonzero(result["water_mask"] == 0)),
             "threshold": float(result["threshold"]),
             "q33": result["q33"], "q67": result["q67"],
         })
