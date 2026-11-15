@@ -72,8 +72,10 @@ class LakeDataProcessor:
             arr = raw.copy()
             valid = self._valid_mask(src, raw)
             if apply_lake_boundary:
-                from src.lake_boundary import load_lake_boundary_mask
-                valid &= load_lake_boundary_mask(raw.shape, src.transform, src.crs, boundary_path)
+                raise ValueError(
+                    "The earlier hand-drawn Jakkur ROI was incorrect and is disabled. "
+                    "Use the complete valid raster footprint."
+                )
             arr[~valid] = np.nan
             crs, transform = src.crs, src.transform
             if crs is None:
@@ -178,9 +180,9 @@ class LakeDataProcessor:
                 label = lab.read(1)
                 valid = self._valid_mask(img, image) & (lab.read_masks(1) > 0)
                 if lake_boundary:
-                    from src.lake_boundary import load_lake_boundary_mask
-                    valid &= load_lake_boundary_mask(
-                        image.shape, img.transform, img.crs, boundary_path
+                    raise ValueError(
+                        "The earlier hand-drawn Jakkur ROI was incorrect and is disabled. "
+                        "Supply full-extent, independently labelled masks instead."
                     )
                 if not np.isin(np.unique(label[valid]), [0, 1]).all():
                     raise ValueError(f"Labels in {label_path} must use 0=land and 1=water.")
