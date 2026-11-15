@@ -96,7 +96,7 @@ interpretation and cropped genuine pixels.
 For the supplied scenes, run:
 
 ```powershell
-.\\.venv\\Scripts\\python.exe -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_generated.csv --write-masks
+.\.venv\Scripts\python.exe -m src.dataset_generator --data-dir Jakkur_lake_datasets --output-csv Jakkur_lake_datasets/NDWI_pixel_depth_dataset_generated.csv --write-masks
 ```
 
 For each scene the generator:
@@ -117,7 +117,7 @@ consistent NDWI scaling and a meaningful NoData mask.
 For a differently named file, pass it explicitly:
 
 ```powershell
-.\\.venv\\Scripts\\python.exe -m src.dataset_generator --input Jakkur_lake_datasets\\custom_scene.tif --output-csv Jakkur_lake_datasets\\custom_scene_labels.csv --write-masks
+.\.venv\Scripts\python.exe -m src.dataset_generator --input Jakkur_lake_datasets\custom_scene.tif --output-csv Jakkur_lake_datasets\custom_scene_labels.csv --write-masks
 ```
 
 Otsu outputs are pseudo-labels and must be reviewed against the source image
