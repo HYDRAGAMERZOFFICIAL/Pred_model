@@ -76,8 +76,10 @@ python -m src.trainer --mode full --patch-size 64 --stride 32 --batch-size 32 --
 
 #### Option 2: Dense Patch Sampling (Stride 16 — Passes Persistence Baseline Gate)
 ```powershell
-python -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50
+python -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50 --early-stopping-patience 25
 ```
+
+> **Note on Early Stopping**: If you want the model to run through all 50 epochs without early stopping, set `--early-stopping-patience 0`.
 
 #### Check Model Deployment Gate Status
 ```powershell
@@ -169,8 +171,10 @@ python3 -m src.trainer --mode full --patch-size 64 --stride 32 --batch-size 32 -
 
 #### Option 2: Dense Patch Sampling (Stride 16 — Passes Persistence Baseline Gate)
 ```bash
-python3 -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50
+python3 -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50 --early-stopping-patience 25
 ```
+
+> **Note on Early Stopping**: If you want the model to run through all 50 epochs without early stopping, set `--early-stopping-patience 0`.
 
 #### Check Model Deployment Gate Status
 ```bash
@@ -233,6 +237,16 @@ python3 -m src.pipeline --mode full --epochs 50
   python -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50
   ```
   This extracts >500 patches, improving boundary learning and satisfying the gate condition (`deployment_eligible: true`).
+
+### Issue: Training halts after 12 or 13 epochs instead of completing all 50 epochs
+- **Cause**: Keras `EarlyStopping` halts training when validation loss (`val_loss`) does not improve for a certain number of consecutive epochs (previously defaulted to 8 epochs). This is an automatic safeguard to prevent overfitting, but when learning rate decreases on a small dataset, it may stop too early before reaching optimal convergence.
+- **Resolution**: Pass `--early-stopping-patience 25` to give the network more epochs to converge, or pass `--early-stopping-patience 0` to disable early stopping entirely and force the trainer to run every requested epoch:
+  ```powershell
+  # Windows
+  python -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50 --early-stopping-patience 25
+  # Or force all 50 epochs:
+  python -m src.trainer --mode full --patch-size 64 --stride 16 --batch-size 16 --epochs 50 --early-stopping-patience 0
+  ```
 
 ### Issue: "Water Volume: Not available" in the UI
 - **Cause**: NDWI (Normalized Difference Water Index) is a surface spectral reflectance ratio `(Green - NIR) / (Green + NIR)`, not underwater bathymetry.

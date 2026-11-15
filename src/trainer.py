@@ -156,7 +156,7 @@ def _compile_loaded_model(model, learning_rate):
 def _train_candidate(
     mode, x_train, y_train, x_val, y_val, scenes, data_report, output_dir,
     patch_size, stride, epochs, batch_size, learning_rate, seed, initial_model=None,
-    augment=True,
+    augment=True, early_stopping_patience=20,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -185,13 +185,50 @@ def _train_candidate(
     checkpoint_path = os.path.join(output_dir, "best.keras")
     hooks = [
         tf.keras.callbacks.ModelCheckpoint(checkpoint_path, monitor="val_loss", save_best_only=True, verbose=1),
-        tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=8, restore_best_weights=True),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=4, min_lr=1e-7),
     ]
+    if early_stopping_patience and early_stopping_patience > 0:
+        hooks.append(
+            tf.keras.callbacks.EarlyStopping(
+                monitor="val_loss",
+                patience=early_stopping_patience,
+                restore_best_weights=True,
+                verbose=1,
+            )
+        )
+        lr_patience = max(6, early_stopping_patience // 2)
+        hooks.append(
+            tf.keras.callbacks.ReduceLROnPlateau(
+                monitor="val_loss",
+                factor=0.5,
+                patience=lr_patience,
+                min_lr=1e-7,
+                verbose=1,
+            )
+        )
+    else:
+        hooks.append(
+            tf.keras.callbacks.ReduceLROnPlateau(
+                monitor="val_loss",
+                factor=0.5,
+                patience=8,
+                min_lr=1e-7,
+                verbose=1,
+            )
+        )
+
     history = model.fit(
         x_train, y_train, validation_data=(x_val, y_val),
         epochs=epochs, batch_size=batch_size, shuffle=True, callbacks=hooks, verbose=1,
     )
+    actual_epochs = len(history.history.get("loss", []))
+    if actual_epochs < epochs:
+        print(
+            f"\n[INFO] Early stopping triggered at epoch {actual_epochs}/{epochs} "
+            f"(validation loss did not improve for {early_stopping_patience} consecutive epochs). "
+            f"Model weights from the best checkpoint were restored."
+        )
+    else:
+        print(f"\n[INFO] Training ran through all {epochs}/{epochs} epochs.")
     # Evaluate the best validation checkpoint, not merely the final epoch.
     if os.path.isfile(checkpoint_path):
         model = tf.keras.models.load_model(
@@ -298,6 +335,7 @@ def train_and_save_model(
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
     learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
     augment=True, spectral_dir=None, reflectance_scale=10000.0,
+    early_stopping_patience=20,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
     data_dir = resolve_data_dir(data_dir)
@@ -373,7 +411,7 @@ def train_and_save_model(
         model_path, report = _train_candidate(
             candidate_mode, x_train, y_train, x_val, y_val, scenes, data_report,
             candidate_dir, patch_size, stride, epochs, batch_size,
-            learning_rate, seed, initial_model, augment,
+            learning_rate, seed, initial_model, augment, early_stopping_patience,
         )
         version = register_model_version(model_path, report, output_dir, f"{run_id}_{candidate_mode}")
         report["version"] = version["run_id"]
@@ -491,6 +529,8 @@ if __name__ == "__main__":
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mode", choices=["both", "full", "incremental"], default="both")
+    parser.add_argument("--early-stopping-patience", type=int, default=20,
+                        help="Number of epochs without validation loss improvement before stopping early (default: 20; pass 0 to disable early stopping).")
     parser.add_argument("--skip-ingest", action="store_true")
     args = parser.parse_args()
     values = vars(args)

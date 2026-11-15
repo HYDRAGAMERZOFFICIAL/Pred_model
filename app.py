@@ -13,7 +13,7 @@ from skimage.filters import threshold_otsu
 import tensorflow as tf
 
 from src.data_processor import LakeDataProcessor, resolve_data_dir, resolve_dataset_csv
-from src.predictor import predict_next_season, resolve_model_artifacts
+from src.predictor import predict_next_season, predict_lake_for_date, resolve_model_artifacts, map_month_to_season_code
 from src.forecasting import forecast_annual_water_area
 from src.spectrum_to_ndwi import SpectrumNDWIProcessor
 import io
@@ -25,157 +25,32 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Application design system: restrained, research-oriented and accessible.
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-
-:root {
-    --ink: #172b3a;
-    --muted: #647687;
-    --line: #e2e8ed;
-    --surface: #ffffff;
-    --canvas: #f4f7f8;
-    --accent: #087e83;
-    --accent-dark: #06666b;
-    --accent-soft: #e7f3f2;
+.block-container {
+    max-width: 1400px;
+    padding-top: 1.8rem;
+    padding-bottom: 3.5rem;
 }
-html, body, [class*="css"] {
-    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    color: var(--ink);
-}
-.stApp, [data-testid="stAppViewContainer"] { background: var(--canvas); }
-[data-testid="stHeader"] { background: rgba(244,247,248,.92); }
-.block-container { max-width: 1480px; padding: 2.2rem 3rem 3.5rem; }
 h1, h2, h3, h4 {
-    color: var(--ink) !important;
-    font-family: "Manrope", "DM Sans", sans-serif !important;
-    letter-spacing: -.035em;
+    font-weight: 700 !important;
 }
-h1 { font-size: 2.05rem !important; font-weight: 800 !important; margin-bottom: .35rem !important; }
-h2 { font-size: 1.42rem !important; font-weight: 700 !important; }
-h3 { font-size: 1.08rem !important; font-weight: 700 !important; }
-p, label, li { color: #34495a; }
-[data-testid="stCaptionContainer"] p, .stCaption { color: var(--muted) !important; }
-[data-testid="stSidebar"] {
-    background: #ffffff;
-    border-right: 1px solid var(--line);
-}
-[data-testid="stSidebar"] > div:first-child { padding-top: 1.25rem; }
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 { color: var(--ink) !important; }
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { font-size: .88rem; }
 [data-testid="stMetric"] {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.1rem;
-    box-shadow: 0 1px 2px rgba(20,40,55,.025);
-}
-[data-testid="stMetricLabel"] p {
-    color: var(--muted) !important;
-    font-size: .78rem !important;
-    font-weight: 600 !important;
-}
-[data-testid="stMetricValue"] {
-    color: var(--ink) !important;
-    font-family: "Manrope", sans-serif;
-    font-size: 1.55rem !important;
-    font-weight: 700 !important;
-}
-[data-testid="stMetricDelta"] { font-size: .78rem !important; }
-.stTabs [data-baseweb="tab-list"] {
-    gap: .35rem;
-    border-bottom: 1px solid var(--line);
-}
-.stTabs [data-baseweb="tab"] {
-    height: 3.1rem;
-    padding: 0 1rem;
-    color: #607282;
-    font-weight: 600;
-    background: transparent;
-}
-.stTabs [aria-selected="true"] {
-    color: var(--accent-dark) !important;
-    border-bottom: 2px solid var(--accent) !important;
-}
-.stButton > button, .stDownloadButton > button {
-    border-radius: 7px;
-    border: 1px solid #cbd7dc;
-    min-height: 2.55rem;
-    font-weight: 600;
-    color: var(--ink);
-    background: #ffffff;
-    transition: background .15s ease, border-color .15s ease;
-}
-.stButton > button:hover, .stDownloadButton > button:hover {
-    border-color: var(--accent);
-    color: var(--accent-dark);
-    background: #f4fbfa;
-}
-.stButton > button[kind="primary"] {
-    color: #ffffff;
-    background: var(--accent);
-    border-color: var(--accent);
-}
-.stButton > button[kind="primary"]:hover {
-    background: var(--accent-dark);
-    border-color: var(--accent-dark);
-    color: #ffffff;
-}
-[data-testid="stAlert"] { border-radius: 8px; border-width: 1px; }
-[data-testid="stExpander"] {
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    background: var(--surface);
-}
-[data-testid="stDataFrame"], [data-testid="stTable"] {
-    border: 1px solid var(--line);
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
-    overflow: hidden;
+    padding: 0.85rem 1rem;
+    background-color: #ffffff;
 }
-[data-baseweb="select"] > div, [data-baseweb="input"] > div,
-[data-baseweb="textarea"] > div {
-    border-radius: 7px;
-    border-color: #d5dfe4;
-}
-hr { border-color: var(--line); }
-[data-testid="stVerticalBlock"] > [data-testid="stImage"] img {
-    border-radius: 8px;
-}
-.app-kicker {
-    color: var(--accent) !important;
-    font-size: .7rem !important;
-    font-weight: 700 !important;
-    letter-spacing: .13em !important;
-    text-transform: uppercase;
-    margin-bottom: .45rem !important;
-}
-.app-subtitle {
-    color: var(--muted) !important;
-    font-size: .98rem !important;
-    max-width: 850px;
-    line-height: 1.6;
-    margin-bottom: 1.35rem !important;
-}
-.section-meta {
-    color: var(--muted);
-    font-size: .78rem;
-    letter-spacing: .04em;
-}
-@media (max-width: 900px) {
-    .block-container { padding: 1.3rem 1rem 2rem; }
-    h1 { font-size: 1.65rem !important; }
+[data-testid="stSidebar"] {
+    border-right: 1px solid #e2e8f0;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="app-kicker">Geospatial intelligence · Research workspace</p>', unsafe_allow_html=True)
-st.title("Lake Intelligence")
+st.title("Lake Intelligence: Geospatial Analysis & Forecasting")
 st.markdown(
-    '<p class="app-subtitle">Satellite-derived water extent, spectral diagnostics and temporal analysis for Jakkur Lake. '
-    'Explore historical scenes, review spatial measurements and inspect model-based forecasts.</p>',
-    unsafe_allow_html=True,
+    "Satellite-derived water extent, spectral diagnostics and temporal forecasting for Jakkur Lake. "
+    "Explore historical scenes, review spatial measurements and generate deep-learning forecasts."
 )
 st.divider()
 
@@ -278,78 +153,70 @@ if current_tif and os.path.exists(current_tif):
     ])
 
     with tab1:
-        st.subheader(f"Spatial Water Analysis: {side_lake} — {side_month} {side_year}")
-        st.caption(f"Raster source: {filename} | CRS: {crs} | Spatial resolution: {np.sqrt(pixel_area_m2):.2f} m/pixel")
-
+        st.subheader(f"Analysis for {side_lake} — {side_month} {side_year}")
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### 1. Calibrated NDWI Index & Shoreline Contour")
-            fig1, ax1 = plt.subplots(figsize=(6, 4.5), dpi=140)
-            im1 = ax1.imshow(arr, cmap='RdYlBu', vmin=-0.8, vmax=0.8)
-            valid_arr = np.nan_to_num(arr, nan=-999.0)
-            if np.any(valid_arr >= thresh):
-                cs = ax1.contour(valid_arr, levels=[thresh], colors=['#dc2626'], linewidths=1.6, linestyles='--')
-                ax1.plot([], [], color='#dc2626', linestyle='--', linewidth=1.6, label=f'Otsu Shoreline ({thresh:.3f})')
-                ax1.legend(loc='lower right', framealpha=0.92, fontsize=8)
-            ax1.set_title("Calibrated NDWI Index & Boundary", fontsize=10, fontweight='bold', pad=8)
-            ax1.set_xlabel("Pixel X", fontsize=8)
-            ax1.set_ylabel("Pixel Y", fontsize=8)
-            ax1.tick_params(labelsize=8)
-            fig1.colorbar(im1, ax=ax1, label='NDWI (-1.0 to +1.0)', fraction=0.046, pad=0.04)
+            st.markdown("### 1. Original NDWI Raster")
+            fig1, ax1 = plt.subplots(figsize=(6, 4.5))
+            im1 = ax1.imshow(arr, cmap='viridis')
+            ax1.set_title(f"NDWI: {side_lake}")
+            fig1.colorbar(im1, ax=ax1, label='NDWI Value')
             st.pyplot(fig1)
 
-            st.markdown("### 2. Delineated Water Surface Extent (Binary)")
-            fig2, ax2 = plt.subplots(figsize=(6, 4.5), dpi=140)
-            ax2.imshow(binary_water, cmap=cmap_water_binary, vmin=0, vmax=1)
-            patches_binary = [
-                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({total_valid - water_pixels:,} px)'),
-                mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Water ({water_pixels:,} px, {metrics["area_km2"]:.4f} km²)'),
-            ]
-            ax2.legend(handles=patches_binary, loc='lower right', framealpha=0.92, fontsize=8)
-            ax2.set_title("Delineated Surface Water Extent", fontsize=10, fontweight='bold', pad=8)
-            ax2.set_xlabel("Pixel X", fontsize=8)
-            ax2.set_ylabel("Pixel Y", fontsize=8)
-            ax2.tick_params(labelsize=8)
+            st.markdown("### 2. Grayscale Normalized Image")
+            fig2, ax2 = plt.subplots(figsize=(6, 4.5))
+            norm_arr = np.nan_to_num(arr)
+            norm_arr = (norm_arr - norm_arr.min()) / (norm_arr.max() - norm_arr.min() + 1e-8)
+            ax2.imshow(norm_arr, cmap='gray')
+            ax2.set_title("Normalized Grayscale")
             st.pyplot(fig2)
 
-        with col2:
-            st.markdown("### 3. Relative Spectral Classes (Proxy Ranks)")
-            fig3, ax3 = plt.subplots(figsize=(6, 4.5), dpi=140)
-            ax3.imshow(depth_map, cmap=cmap_depth_4class, vmin=0, vmax=3)
-            patches_depth = [
-                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
-                mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
-                mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
-                mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
+            st.markdown("### 5. Delineated Water Extent (Binary Mask)")
+            fig_bin, ax_bin = plt.subplots(figsize=(6, 4.5))
+            ax_bin.imshow(binary_water, cmap=cmap_water_binary, vmin=0, vmax=1)
+            patches_bin = [
+                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({total_valid - water_pixels:,} px)'),
+                mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Water ({water_pixels:,} px)'),
             ]
-            ax3.legend(handles=patches_depth, loc='lower right', framealpha=0.92, fontsize=8)
-            ax3.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
-            ax3.set_xlabel("Pixel X", fontsize=8)
-            ax3.set_ylabel("Pixel Y", fontsize=8)
-            ax3.tick_params(labelsize=8)
+            ax_bin.legend(handles=patches_bin, loc='lower right', framealpha=0.9, fontsize=8)
+            ax_bin.set_title("Binary Water Extent")
+            st.pyplot(fig_bin)
+
+        with col2:
+            st.markdown("### 3. Relative 3D Depth Map")
+            fig3, ax3 = plt.subplots(figsize=(6, 4.5))
+            im3 = ax3.imshow(depth_map, cmap='jet', vmin=0, vmax=3)
+            ax3.set_title("Depth Classes (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
+            fig3.colorbar(im3, ax=ax3, label='Depth Class')
             st.pyplot(fig3)
 
-            st.markdown("### 4. NDWI Distribution & Otsu Cutoff Analysis")
-            fig4, ax4 = plt.subplots(figsize=(6, 4.5), dpi=140)
-            valid_vals = arr[~np.isnan(arr)].ravel()
-            ax4.hist(valid_vals, bins=50, color='#0284c7', alpha=0.75, edgecolor='#0369a1', density=True, label='Pixel Density')
-            ax4.axvline(thresh, color='#dc2626', linestyle='--', linewidth=2.0, label=f'Otsu Cutoff ({thresh:.4f})')
-            ax4.set_title("NDWI Histogram & Otsu Threshold", fontsize=10, fontweight='bold', pad=8)
-            ax4.set_xlabel("NDWI Value", fontsize=8)
-            ax4.set_ylabel("Normalized Density", fontsize=8)
-            ax4.tick_params(labelsize=8)
-            ax4.grid(alpha=0.25, linestyle=':')
-            ax4.legend(loc='upper right', framealpha=0.9, fontsize=8)
+            st.markdown("### 4. Spectral Image (Pseudo-Color)")
+            fig4, ax4 = plt.subplots(figsize=(6, 4.5))
+            im4 = ax4.imshow(arr, cmap='inferno')
+            ax4.set_title("Spectral Intensity Map")
+            fig4.colorbar(im4, ax=ax4, label='Intensity')
             st.pyplot(fig4)
 
-        st.markdown("### Hydrological Threshold Statistics")
+            st.markdown("### 6. NDWI Pixel Histogram & Otsu Threshold")
+            fig5, ax5 = plt.subplots(figsize=(6, 4.5))
+            valid_vals = arr[~np.isnan(arr)]
+            ax5.hist(valid_vals.ravel(), bins=50, color='#1f77b4', alpha=0.8, edgecolor='black')
+            ax5.axvline(thresh, color='red', linestyle='--', linewidth=2.5, label=f'Otsu Threshold: {thresh:.4f}')
+            ax5.set_title("NDWI Histogram with Otsu Line")
+            ax5.set_xlabel("NDWI Value")
+            ax5.set_ylabel("Pixel Frequency")
+            ax5.legend()
+            st.pyplot(fig5)
+
+        st.markdown("### Threshold statistics")
         st.markdown(f"""
-        - **Otsu Cutoff Threshold:** `{thresh:.4f}`
-        - **Total Valid Scene Pixels:** `{total_valid:,}`
-        - **Classified Water Pixels:** `{water_pixels:,}` ({(water_pixels / total_valid) * 100:.2f}%)
-        - **Classified Non-Water Pixels:** `{total_valid - water_pixels:,}` ({(1 - water_pixels / total_valid) * 100:.2f}%)
-        - **Calculated Water Surface Area:** `{metrics['area_km2']:.4f} km²` ({metrics['area_m2']:,.0f} m²)
+        - **Otsu Threshold Value:** `{thresh:.4f}`
+        - **Total Valid Pixels:** `{total_valid:,}`
+        - **Water Pixels:** `{water_pixels:,}` ({(water_pixels / total_valid) * 100:.2f}%)
+        - **Land Pixels:** `{total_valid - water_pixels:,}` ({(1 - water_pixels / total_valid) * 100:.2f}%)
+        - **Water Coverage:** `{(water_pixels / total_valid) * 100:.2f}%`
+        - **Water Surface Area:** `{metrics['area_km2']:.4f} km²` ({metrics['area_m2']:,.0f} m²)
         """)
 
     with tab2:
@@ -378,7 +245,9 @@ if current_tif and os.path.exists(current_tif):
         st.subheader("Seasonal and Annual Forecasts")
         st.caption("Forecasts are derived from the dated NDWI archive. Seasonal maps come from the trained multi-task U-Net; annual area is a separate statistical trend projection.")
 
-        st.markdown("### 1. Next seasonal spatial forecast")
+        st.markdown("### 1. Spatial Lake Prediction & Forecasting")
+        st.caption("Select a year and month to generate deep-learning spatial predictions for Jakkur Lake.")
+
         model_path, model_report_path, model_source = resolve_model_artifacts("knowledge_base")
         model_is_eligible = False
         if os.path.isfile(model_report_path):
@@ -391,11 +260,39 @@ if current_tif and os.path.exists(current_tif):
                 st.caption("You can generate and inspect maps, but treat them as research previews—not validated forecasts or decision-grade outputs.")
             if model_source == "versioned_candidate_preview":
                 st.info("No validated active model is available yet. The latest versioned training candidate is loaded for experimental preview only.")
-            button_label = "Generate next-season prediction" if model_is_eligible else "Generate experimental next-season prediction"
+
+            # Year & Month Dropdown Selectors
+            col_target_yr, col_target_mo = st.columns(2)
+            with col_target_yr:
+                target_forecast_year = st.selectbox(
+                    "Forecast Year",
+                    [2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030],
+                    index=3,  # default to 2026
+                    key="target_forecast_year",
+                    help="Choose a future year (2026+) for multi-step projection, or a historical year (2023-2025) to backcast and validate against satellite ground truth."
+                )
+            with col_target_mo:
+                target_forecast_month = st.selectbox(
+                    "Forecast Month",
+                    months,
+                    index=2,  # default to March
+                    key="target_forecast_month",
+                    help="The month is mapped to its corresponding 4-month hydrological period (Jan-Apr, May-Aug, Sep-Dec)."
+                )
+
+            t_code, _, t_desc = map_month_to_season_code(target_forecast_month)
+            if target_forecast_year > 2025:
+                st.caption(f"Target Selection: **{target_forecast_month} {target_forecast_year}** ({t_code} · {t_desc}) — Future Autoregressive Projection")
+            else:
+                st.caption(f"Target Selection: **{target_forecast_month} {target_forecast_year}** ({t_code} · {t_desc}) — Historical Backcast & Validation")
+
+            button_label = f"Predict Lake for {target_forecast_month} {target_forecast_year}"
             if st.button(button_label, type="primary", key="run_seasonal_forecast"):
                 try:
-                    with st.spinner("Running temporal U-Net over the latest two NDWI scenes..."):
-                        forecast_result = predict_next_season(
+                    with st.spinner(f"Computing spatial U-Net forecast for {target_forecast_month} {target_forecast_year}..."):
+                        forecast_result = predict_lake_for_date(
+                            target_year=target_forecast_year,
+                            target_month=target_forecast_month,
                             data_dir=dataset_dir,
                             model_dir="knowledge_base",
                             output_dir="outputs",
@@ -406,24 +303,37 @@ if current_tif and os.path.exists(current_tif):
                         )
                     st.session_state["seasonal_forecast_result"] = forecast_result
                 except Exception as exc:
-                    st.error(f"Seasonal prediction failed: {exc}")
+                    st.error(f"Prediction failed for {target_forecast_month} {target_forecast_year}: {exc}")
 
             result = st.session_state.get("seasonal_forecast_result")
             if result:
                 if result.get("model_validation_status") == "experimental_unvalidated":
                     st.warning("Experimental output: this model has not passed the persistence-baseline validation gate.")
                 else:
-                    st.success("Validated next-period spatial prediction generated.")
-                if result.get("model_source") == "versioned_candidate_preview":
-                    st.caption("Model source: latest versioned candidate; it has not been promoted to the validated active model.")
-                st.write("Input scenes:", " → ".join(result["input_scenes"]))
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Predicted water pixels", f'{result["water_pixels"]:,}')
-                if result["water_area_km2"] is not None:
-                    c2.metric("Predicted water area", f'{result["water_area_km2"]:.5f} km²')
+                    st.success(f"Spatial prediction generated for {result.get('predicted_for', 'selected period')}.")
+
+                if result.get("steps_ahead", 0) > 0:
+                    st.info(f"Forecast Horizon: **{result['steps_ahead']} seasonal step(s) ahead** from the latest observed baseline.")
+                elif result.get("ground_truth_available"):
+                    st.success("Historical satellite ground-truth observation is available for this period. Validation comparison shown below.")
+
+                st.write("Input baselines used:", " → ".join(result["input_scenes"]))
+
+                # Metrics row
+                if result.get("ground_truth_available") and result.get("observed_water_area_km2") is not None:
+                    mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+                    mcol1.metric("Predicted Water Area", f'{result["water_area_km2"]:.4f} km²', f'{result["water_pixels"]:,} px')
+                    mcol2.metric("Observed Satellite Area", f'{result["observed_water_area_km2"]:.4f} km²', f'{result["observed_water_pixels"]:,} px')
+                    mcol3.metric("Spatial IoU Agreement", f'{result["iou"] * 100:.2f}%', help="Intersection over Union between predicted and observed water bodies.")
+                    mcol4.metric("Pixel Accuracy", f'{result["accuracy"] * 100:.2f}%')
                 else:
-                    c2.metric("Predicted water area", "CRS area unavailable")
-                c3.metric("Valid pixels", f'{result["valid_pixels"]:,}')
+                    mcol1, mcol2, mcol3 = st.columns(3)
+                    mcol1.metric("Predicted Water Pixels", f'{result["water_pixels"]:,}')
+                    if result["water_area_km2"] is not None:
+                        mcol2.metric("Predicted Water Area", f'{result["water_area_km2"]:.5f} km²')
+                    else:
+                        mcol2.metric("Predicted Water Area", "CRS area unavailable")
+                    mcol3.metric("Valid Scene Pixels", f'{result["valid_pixels"]:,}')
                 fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), dpi=150)
                 
                 # 1. Predicted Water Probability
@@ -469,15 +379,16 @@ if current_tif and os.path.exists(current_tif):
 
                 buf_pred = io.BytesIO()
                 fig.savefig(buf_pred, format="png", dpi=200, bbox_inches="tight")
+                file_tag = f"{result.get('target_year', 'season')}_{result.get('period_code', 'forecast')}"
                 st.download_button(
-                    "Download high-resolution prediction map (PNG, 200 DPI)",
+                    f"Download high-resolution prediction map ({file_tag}.png, 200 DPI)",
                     data=buf_pred.getvalue(),
-                    file_name="next_season_spatial_forecast_report.png",
+                    file_name=f"lake_prediction_{file_tag}_report.png",
                     mime="image/png",
                 )
 
                 with st.expander("Export prediction GeoTIFFs and individual raster products", expanded=False):
-                    st.caption("Raw raster products maintain exact spatial matrix dimensions (97×162 px) for GIS software integration (QGIS, ArcGIS).")
+                    st.caption(f"Raw raster products for {result.get('predicted_for', 'forecast')} (97×162 px) for GIS software integration (QGIS, ArcGIS).")
                     gcol1, gcol2 = st.columns(2)
                     with gcol1:
                         st.download_button(
@@ -497,15 +408,15 @@ if current_tif and os.path.exists(current_tif):
                     with pcol1:
                         st.caption("Probability raster (97×162 px)")
                         with open(result["water_probability_png_path"], "rb") as image_file:
-                            st.download_button("Download probability PNG", image_file.read(), file_name="next_season_water_probability.png", mime="image/png")
+                            st.download_button("Download probability PNG", image_file.read(), file_name=os.path.basename(result["water_probability_png_path"]), mime="image/png")
                     with pcol2:
                         st.caption("Extent raster (97×162 px)")
                         with open(result["water_extent_png_path"], "rb") as image_file:
-                            st.download_button("Download water extent PNG", image_file.read(), file_name="next_season_water_extent.png", mime="image/png")
+                            st.download_button("Download water extent PNG", image_file.read(), file_name=os.path.basename(result["water_extent_png_path"]), mime="image/png")
                     with pcol3:
                         st.caption("Class raster (97×162 px)")
                         with open(result["relative_class_png_path"], "rb") as image_file:
-                            st.download_button("Download class map PNG", image_file.read(), file_name="next_season_relative_classes.png", mime="image/png")
+                            st.download_button("Download class map PNG", image_file.read(), file_name=os.path.basename(result["relative_class_png_path"]), mime="image/png")
             else:
                 st.info("The model is available. Generate a forecast to create georeferenced GeoTIFF outputs.")
         else:

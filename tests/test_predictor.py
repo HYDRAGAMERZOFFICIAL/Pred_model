@@ -8,7 +8,7 @@ import rasterio
 from matplotlib import image as mpimg
 from rasterio.transform import from_origin
 
-from src.predictor import _pixel_area_m2, _save_prediction_previews, predict_next_season, resolve_model_artifacts
+from src.predictor import _pixel_area_m2, _save_prediction_previews, predict_next_season, predict_lake_for_date, resolve_model_artifacts, map_month_to_season_code
 
 
 class TestPredictorPixelArea(unittest.TestCase):
@@ -99,6 +99,30 @@ class TestPredictorPixelArea(unittest.TestCase):
                 area = _pixel_area_m2(src, 2, 2)
 
         self.assertGreater(area, 0)
+
+    def test_map_month_to_season_code(self):
+        code, idx, desc = map_month_to_season_code("March")
+        self.assertEqual(code, "JAN_APR")
+        self.assertEqual(idx, 0)
+        code2, idx2, _ = map_month_to_season_code("July")
+        self.assertEqual(code2, "MAY_AUG")
+        self.assertEqual(idx2, 1)
+        code3, idx3, _ = map_month_to_season_code("November")
+        self.assertEqual(code3, "SEP_DEC")
+        self.assertEqual(idx3, 2)
+        code4, _, _ = map_month_to_season_code(6)
+        self.assertEqual(code4, "MAY_AUG")
+
+    def test_predict_lake_for_date_blocks_without_quality_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = os.path.join(tmp, "models")
+            os.makedirs(model_dir)
+            with open(os.path.join(model_dir, "ndwi_multitask_unet.keras"), "wb") as stream:
+                stream.write(b"placeholder")
+            with open(os.path.join(model_dir, "multitask_training_report.json"), "w", encoding="utf-8") as stream:
+                stream.write('{"patch_size": 64, "deployment_eligible": false}')
+            with self.assertRaisesRegex(RuntimeError, "persistence-baseline"):
+                predict_lake_for_date(2026, "March", data_dir=tmp, model_dir=model_dir, output_dir=os.path.join(tmp, "out"))
 
 
 if __name__ == "__main__":
