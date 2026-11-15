@@ -10,15 +10,31 @@ SpectrumNDWIProcessor.
 """
 
 import os
+import glob
 import numpy as np
 import rasterio
 from rasterio.transform import Affine
 
-def generate_sample_bands(template_ndwi_path='NDWI_JAN_APR_22.tif',
+def resolve_template_tif(path='NDWI_JAN_APR_22.tif'):
+    if path and os.path.exists(path):
+        return path
+    from src.data_processor import resolve_data_dir
+    data_dir = resolve_data_dir()
+    if path:
+        cand = os.path.join(data_dir, os.path.basename(path))
+        if os.path.exists(cand):
+            return cand
+    tifs = sorted(glob.glob(os.path.join(data_dir, "*.tif")) + glob.glob(os.path.join(data_dir, "*.tiff")))
+    if tifs:
+        return tifs[0]
+    return path
+
+def generate_sample_bands(template_ndwi_path=None,
                           output_dir='sample_spectral_data'):
     os.makedirs(output_dir, exist_ok=True)
+    resolved_path = resolve_template_tif(template_ndwi_path or 'NDWI_JAN_APR_22.tif')
 
-    with rasterio.open(template_ndwi_path) as src:
+    with rasterio.open(resolved_path) as src:
         ndwi_base = src.read(1).astype(np.float32)
         meta = src.meta.copy()
         nodata = src.nodata

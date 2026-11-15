@@ -5,6 +5,8 @@ import os
 import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.patches import Patch
 from rasterio.transform import xy
 from pyproj import CRS as PyprojCRS
 
@@ -41,21 +43,40 @@ def _pixel_area_m2(src, height, width):
 
 
 def _save_prediction_previews(water_probability, predicted_water, predicted_classes, valid_mask, output_dir):
-    """Write transparent PNG previews for the three raster prediction products."""
+    """Write high-contrast, transparent PNG previews matching the raster grid."""
     os.makedirs(output_dir, exist_ok=True)
     outputs = {
         "water_probability_png_path": os.path.join(output_dir, "next_season_water_probability.png"),
         "water_extent_png_path": os.path.join(output_dir, "next_season_water_extent.png"),
         "relative_class_png_path": os.path.join(output_dir, "next_season_relative_classes.png"),
     }
+
+    prob_cmap = plt.get_cmap("Blues").copy()
+    if hasattr(prob_cmap, "with_extremes"):
+        prob_cmap = prob_cmap.with_extremes(bad=(0.0, 0.0, 0.0, 0.0))
+    else:
+        prob_cmap.set_bad(alpha=0.0)
+
+    # High-contrast 2-color palette: Land = neutral gray (#d0d7de), Water = deep aquatic blue (#0969da)
+    water_cmap = ListedColormap(["#d0d7de", "#0969da"])
+    if hasattr(water_cmap, "with_extremes"):
+        water_cmap = water_cmap.with_extremes(bad=(0.0, 0.0, 0.0, 0.0))
+    else:
+        water_cmap.set_bad(alpha=0.0)
+
+    # High-contrast 4-color palette: Land (#d0d7de), Shallow (#7ee787), Moderate (#2f81f7), Deep (#0d419d)
+    class_cmap = ListedColormap(["#d0d7de", "#7ee787", "#2f81f7", "#0d419d"])
+    if hasattr(class_cmap, "with_extremes"):
+        class_cmap = class_cmap.with_extremes(bad=(0.0, 0.0, 0.0, 0.0))
+    else:
+        class_cmap.set_bad(alpha=0.0)
+
     products = [
-        (water_probability, "Blues", 0.0, 1.0, outputs["water_probability_png_path"]),
-        (predicted_water.astype(np.uint8), "Blues", 0.0, 1.0, outputs["water_extent_png_path"]),
-        (predicted_classes, "viridis", 0.0, 3.0, outputs["relative_class_png_path"]),
+        (water_probability, prob_cmap, 0.0, 1.0, outputs["water_probability_png_path"]),
+        (predicted_water.astype(np.uint8), water_cmap, 0.0, 1.0, outputs["water_extent_png_path"]),
+        (predicted_classes, class_cmap, 0.0, 3.0, outputs["relative_class_png_path"]),
     ]
-    for array, palette, minimum, maximum, path in products:
-        color_map = plt.get_cmap(palette).copy()
-        color_map.set_bad(alpha=0.0)
+    for array, color_map, minimum, maximum, path in products:
         masked = np.ma.array(array, mask=~valid_mask)
         plt.imsave(path, masked, cmap=color_map, vmin=minimum, vmax=maximum)
     return outputs

@@ -5,6 +5,8 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import matplotlib.patches as mpatches
 import streamlit as st
 import rasterio
 from skimage.filters import threshold_otsu
@@ -182,6 +184,10 @@ dataset_dir = processor.data_dir
 tif_files = processor.tif_files
 csv_path = resolve_dataset_csv(dataset_dir)
 
+# Standardized scientific cartographic palettes
+cmap_water_binary = ListedColormap(['#e2e8f0', '#0284c7'])
+cmap_depth_4class = ListedColormap(['#e2e8f0', '#7dd3fc', '#0284c7', '#0c4a6e'])
+
 with st.sidebar.expander("Project setup and model readiness", expanded=False):
     csv_ready = os.path.isfile(csv_path)
     st.write(f"Dataset folder: **`{dataset_dir}`**")
@@ -272,59 +278,79 @@ if current_tif and os.path.exists(current_tif):
     ])
 
     with tab1:
-        st.subheader(f"Analysis for {side_lake} — {side_month} {side_year}")
+        st.subheader(f"Spatial Water Analysis: {side_lake} — {side_month} {side_year}")
+        st.caption(f"Raster source: {filename} | CRS: {crs} | Spatial resolution: {np.sqrt(pixel_area_m2):.2f} m/pixel")
+
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### 1. Original NDWI Raster")
-            fig, ax = plt.subplots(figsize=(6, 4.5))
-            im = ax.imshow(arr, cmap='viridis')
-            ax.set_title(f"NDWI: {side_lake}")
-            fig.colorbar(im, ax=ax, label='NDWI Value')
-            st.pyplot(fig)
+            st.markdown("### 1. Calibrated NDWI Index & Shoreline Contour")
+            fig1, ax1 = plt.subplots(figsize=(6, 4.5), dpi=140)
+            im1 = ax1.imshow(arr, cmap='RdYlBu', vmin=-0.8, vmax=0.8)
+            valid_arr = np.nan_to_num(arr, nan=-999.0)
+            if np.any(valid_arr >= thresh):
+                cs = ax1.contour(valid_arr, levels=[thresh], colors=['#dc2626'], linewidths=1.6, linestyles='--')
+                ax1.plot([], [], color='#dc2626', linestyle='--', linewidth=1.6, label=f'Otsu Shoreline ({thresh:.3f})')
+                ax1.legend(loc='lower right', framealpha=0.92, fontsize=8)
+            ax1.set_title("Calibrated NDWI Index & Boundary", fontsize=10, fontweight='bold', pad=8)
+            ax1.set_xlabel("Pixel X", fontsize=8)
+            ax1.set_ylabel("Pixel Y", fontsize=8)
+            ax1.tick_params(labelsize=8)
+            fig1.colorbar(im1, ax=ax1, label='NDWI (-1.0 to +1.0)', fraction=0.046, pad=0.04)
+            st.pyplot(fig1)
 
-            st.markdown("### 2. Grayscale Normalized Image")
-            fig2, ax2 = plt.subplots(figsize=(6, 4.5))
-            norm_arr = np.nan_to_num(arr)
-            norm_arr = (norm_arr - norm_arr.min()) / (norm_arr.max() - norm_arr.min() + 1e-8)
-            ax2.imshow(norm_arr, cmap='gray')
-            ax2.set_title("Normalized Grayscale")
+            st.markdown("### 2. Delineated Water Surface Extent (Binary)")
+            fig2, ax2 = plt.subplots(figsize=(6, 4.5), dpi=140)
+            ax2.imshow(binary_water, cmap=cmap_water_binary, vmin=0, vmax=1)
+            patches_binary = [
+                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({total_valid - water_pixels:,} px)'),
+                mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Water ({water_pixels:,} px, {metrics["area_km2"]:.4f} km²)'),
+            ]
+            ax2.legend(handles=patches_binary, loc='lower right', framealpha=0.92, fontsize=8)
+            ax2.set_title("Delineated Surface Water Extent", fontsize=10, fontweight='bold', pad=8)
+            ax2.set_xlabel("Pixel X", fontsize=8)
+            ax2.set_ylabel("Pixel Y", fontsize=8)
+            ax2.tick_params(labelsize=8)
             st.pyplot(fig2)
 
-            st.markdown("### 5. NDWI Pixel Histogram & Otsu Threshold")
-            fig5, ax5 = plt.subplots(figsize=(6, 4.5))
-            valid_vals = arr[~np.isnan(arr)]
-            ax5.hist(valid_vals.ravel(), bins=50, color='#1f77b4', alpha=0.8, edgecolor='black')
-            ax5.axvline(thresh, color='red', linestyle='--', linewidth=2.5, label=f'Otsu Threshold: {thresh:.4f}')
-            ax5.set_title("NDWI Histogram with Otsu Line")
-            ax5.set_xlabel("NDWI Value")
-            ax5.set_ylabel("Pixel Frequency")
-            ax5.legend()
-            st.pyplot(fig5)
-
         with col2:
-            st.markdown("### 3. Relative 3D Depth Map")
-            fig3, ax3 = plt.subplots(figsize=(6, 4.5))
-            im3 = ax3.imshow(depth_map, cmap='jet', vmin=0, vmax=3)
-            ax3.set_title("Depth Classes (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
-            fig3.colorbar(im3, ax=ax3, label='Depth Class')
+            st.markdown("### 3. Relative Spectral Classes (Proxy Ranks)")
+            fig3, ax3 = plt.subplots(figsize=(6, 4.5), dpi=140)
+            ax3.imshow(depth_map, cmap=cmap_depth_4class, vmin=0, vmax=3)
+            patches_depth = [
+                mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
+                mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
+                mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
+                mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
+            ]
+            ax3.legend(handles=patches_depth, loc='lower right', framealpha=0.92, fontsize=8)
+            ax3.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
+            ax3.set_xlabel("Pixel X", fontsize=8)
+            ax3.set_ylabel("Pixel Y", fontsize=8)
+            ax3.tick_params(labelsize=8)
             st.pyplot(fig3)
 
-            st.markdown("### 4. Spectral Image (Pseudo-Color)")
-            fig4, ax4 = plt.subplots(figsize=(6, 4.5))
-            im4 = ax4.imshow(arr, cmap='inferno')
-            ax4.set_title("Spectral Intensity Map")
-            fig4.colorbar(im4, ax=ax4, label='Intensity')
+            st.markdown("### 4. NDWI Distribution & Otsu Cutoff Analysis")
+            fig4, ax4 = plt.subplots(figsize=(6, 4.5), dpi=140)
+            valid_vals = arr[~np.isnan(arr)].ravel()
+            ax4.hist(valid_vals, bins=50, color='#0284c7', alpha=0.75, edgecolor='#0369a1', density=True, label='Pixel Density')
+            ax4.axvline(thresh, color='#dc2626', linestyle='--', linewidth=2.0, label=f'Otsu Cutoff ({thresh:.4f})')
+            ax4.set_title("NDWI Histogram & Otsu Threshold", fontsize=10, fontweight='bold', pad=8)
+            ax4.set_xlabel("NDWI Value", fontsize=8)
+            ax4.set_ylabel("Normalized Density", fontsize=8)
+            ax4.tick_params(labelsize=8)
+            ax4.grid(alpha=0.25, linestyle=':')
+            ax4.legend(loc='upper right', framealpha=0.9, fontsize=8)
             st.pyplot(fig4)
 
-            st.markdown("### Threshold statistics")
-            st.markdown(f"""
-            - **Otsu Threshold Value:** `{thresh:.4f}`
-            - **Total Valid Pixels:** `{total_valid:,}`
-            - **Water Pixels:** `{water_pixels:,}`
-            - **Land Pixels:** `{total_valid - water_pixels:,}`
-            - **Water Coverage:** `{(water_pixels / total_valid) * 100:.2f}%`
-            """)
+        st.markdown("### Hydrological Threshold Statistics")
+        st.markdown(f"""
+        - **Otsu Cutoff Threshold:** `{thresh:.4f}`
+        - **Total Valid Scene Pixels:** `{total_valid:,}`
+        - **Classified Water Pixels:** `{water_pixels:,}` ({(water_pixels / total_valid) * 100:.2f}%)
+        - **Classified Non-Water Pixels:** `{total_valid - water_pixels:,}` ({(1 - water_pixels / total_valid) * 100:.2f}%)
+        - **Calculated Water Surface Area:** `{metrics['area_km2']:.4f} km²` ({metrics['area_m2']:,.0f} m²)
+        """)
 
     with tab2:
         st.subheader("Water Surface Area & Volumetric Analytics")
@@ -398,42 +424,88 @@ if current_tif and os.path.exists(current_tif):
                 else:
                     c2.metric("Predicted water area", "CRS area unavailable")
                 c3.metric("Valid pixels", f'{result["valid_pixels"]:,}')
-                fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-                im = axes[0].imshow(result["water_probability"], cmap="Blues", vmin=0, vmax=1)
-                axes[0].set_title("Next-season water probability")
-                fig.colorbar(im, ax=axes[0], fraction=0.046, pad=0.04)
-                im2 = axes[1].imshow(result["relative_classes"], cmap="viridis", vmin=0, vmax=3)
-                axes[1].set_title("Predicted relative NDWI classes")
-                fig.colorbar(im2, ax=axes[1], ticks=[0, 1, 2, 3], fraction=0.046, pad=0.04)
+                fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), dpi=150)
+                
+                # 1. Predicted Water Probability
+                im0 = axes[0].imshow(result["water_probability"], cmap="Blues", vmin=0.0, vmax=1.0)
+                prob_data = np.nan_to_num(result["water_probability"], nan=0.0)
+                if np.any(prob_data >= 0.5):
+                    axes[0].contour(prob_data, levels=[0.5], colors=['#dc2626'], linewidths=1.6, linestyles='--')
+                    axes[0].plot([], [], color='#dc2626', linestyle='--', linewidth=1.6, label='Decision Boundary (p ≥ 0.50)')
+                    axes[0].legend(loc='lower right', framealpha=0.92, fontsize=7.5)
+                axes[0].set_title("1. Water Occurrence Probability", fontsize=10, fontweight='bold', pad=8)
+                cb0 = fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+                cb0.set_ticks([0.0, 0.25, 0.50, 0.75, 1.0])
+                cb0.set_ticklabels(['0%', '25%', '50%', '75%', '100%'])
+                cb0.ax.tick_params(labelsize=8)
+
+                # 2. Predicted Water Extent
+                pred_water_binary = (result["water_probability"] >= 0.5).astype(np.uint8)
+                axes[1].imshow(pred_water_binary, cmap=cmap_water_binary, vmin=0, vmax=1)
+                patches_pred_binary = [
+                    mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({result["valid_pixels"] - result["water_pixels"]:,} px)'),
+                    mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Predicted Water ({result["water_pixels"]:,} px)'),
+                ]
+                axes[1].legend(handles=patches_pred_binary, loc='lower right', framealpha=0.92, fontsize=7.5)
+                axes[1].set_title("2. Delineated Water Extent", fontsize=10, fontweight='bold', pad=8)
+
+                # 3. Predicted Relative Classes
+                axes[2].imshow(result["relative_classes"], cmap=cmap_depth_4class, vmin=0, vmax=3)
+                patches_pred_classes = [
+                    mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
+                    mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
+                    mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
+                    mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
+                ]
+                axes[2].legend(handles=patches_pred_classes, loc='lower right', framealpha=0.92, fontsize=7.5)
+                axes[2].set_title("3. Predicted Relative Classes", fontsize=10, fontweight='bold', pad=8)
+
                 for axis in axes:
-                    axis.set_axis_off()
+                    axis.set_xlabel("Pixel X", fontsize=8)
+                    axis.set_ylabel("Pixel Y", fontsize=8)
+                    axis.tick_params(labelsize=7.5)
+                plt.tight_layout()
                 st.pyplot(fig)
-                st.markdown("### Prediction images")
-                image_col1, image_col2, image_col3 = st.columns(3)
-                with image_col1:
-                    st.image(result["water_probability_png_path"], caption="Predicted water probability", width="stretch")
-                    with open(result["water_probability_png_path"], "rb") as image_file:
-                        st.download_button("Download probability PNG", image_file.read(), file_name="next_season_water_probability.png", mime="image/png")
-                with image_col2:
-                    st.image(result["water_extent_png_path"], caption="Predicted water extent", width="stretch")
-                    with open(result["water_extent_png_path"], "rb") as image_file:
-                        st.download_button("Download water extent PNG", image_file.read(), file_name="next_season_water_extent.png", mime="image/png")
-                with image_col3:
-                    st.image(result["relative_class_png_path"], caption="Predicted relative NDWI classes", width="stretch")
-                    with open(result["relative_class_png_path"], "rb") as image_file:
-                        st.download_button("Download class map PNG", image_file.read(), file_name="next_season_relative_classes.png", mime="image/png")
+
+                buf_pred = io.BytesIO()
+                fig.savefig(buf_pred, format="png", dpi=200, bbox_inches="tight")
                 st.download_button(
-                    "Download water probability GeoTIFF",
-                    data=open(result["water_probability_path"], "rb").read(),
-                    file_name=os.path.basename(result["water_probability_path"]),
-                    mime="image/tiff",
+                    "Download high-resolution prediction map (PNG, 200 DPI)",
+                    data=buf_pred.getvalue(),
+                    file_name="next_season_spatial_forecast_report.png",
+                    mime="image/png",
                 )
-                st.download_button(
-                    "Download relative class GeoTIFF",
-                    data=open(result["relative_class_path"], "rb").read(),
-                    file_name=os.path.basename(result["relative_class_path"]),
-                    mime="image/tiff",
-                )
+
+                with st.expander("Export prediction GeoTIFFs and individual raster products", expanded=False):
+                    st.caption("Raw raster products maintain exact spatial matrix dimensions (97×162 px) for GIS software integration (QGIS, ArcGIS).")
+                    gcol1, gcol2 = st.columns(2)
+                    with gcol1:
+                        st.download_button(
+                            "Download water probability GeoTIFF",
+                            data=open(result["water_probability_path"], "rb").read(),
+                            file_name=os.path.basename(result["water_probability_path"]),
+                            mime="image/tiff",
+                        )
+                    with gcol2:
+                        st.download_button(
+                            "Download relative class GeoTIFF",
+                            data=open(result["relative_class_path"], "rb").read(),
+                            file_name=os.path.basename(result["relative_class_path"]),
+                            mime="image/tiff",
+                        )
+                    pcol1, pcol2, pcol3 = st.columns(3)
+                    with pcol1:
+                        st.caption("Probability raster (97×162 px)")
+                        with open(result["water_probability_png_path"], "rb") as image_file:
+                            st.download_button("Download probability PNG", image_file.read(), file_name="next_season_water_probability.png", mime="image/png")
+                    with pcol2:
+                        st.caption("Extent raster (97×162 px)")
+                        with open(result["water_extent_png_path"], "rb") as image_file:
+                            st.download_button("Download water extent PNG", image_file.read(), file_name="next_season_water_extent.png", mime="image/png")
+                    with pcol3:
+                        st.caption("Class raster (97×162 px)")
+                        with open(result["relative_class_png_path"], "rb") as image_file:
+                            st.download_button("Download class map PNG", image_file.read(), file_name="next_season_relative_classes.png", mime="image/png")
             else:
                 st.info("The model is available. Generate a forecast to create georeferenced GeoTIFF outputs.")
         else:
@@ -761,13 +833,20 @@ if current_tif and os.path.exists(current_tif):
                     ax_h.legend()
                     st.pyplot(fig_h)
 
-                    st.markdown("#### 4. Binary Water Mask & Relative Depth Classification")
-                    fig_d, ax_d = plt.subplots(figsize=(6, 4.5))
-                    im_d = ax_d.imshow(res['depth_map'], cmap='jet', vmin=0, vmax=3)
-                    ax_d.set_title("Relative NDWI classes (not bathymetry)")
-                    cb_d = fig_d.colorbar(im_d, ax=ax_d, ticks=[0, 1, 2, 3])
-                    cb_d.ax.set_yticklabels(['Land', 'Shallow', 'Moderate', 'Deep'])
-                    ax_d.axis('off')
+                    st.markdown("#### 4. Relative Spectral Classification (Proxy Ranks)")
+                    fig_d, ax_d = plt.subplots(figsize=(6, 4.5), dpi=140)
+                    ax_d.imshow(res['depth_map'], cmap=cmap_depth_4class, vmin=0, vmax=3)
+                    ax_d.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
+                    patches_d = [
+                        mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
+                        mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
+                        mpatches.Patch(facecolor='#0284c7', edgecolor='#0284c7', label='2: Moderate Depth'),
+                        mpatches.Patch(facecolor='#0c4a6e', edgecolor='#082f49', label='3: Deep Water'),
+                    ]
+                    ax_d.legend(handles=patches_d, loc='lower right', framealpha=0.92, fontsize=8)
+                    ax_d.set_xlabel("Pixel X", fontsize=8)
+                    ax_d.set_ylabel("Pixel Y", fontsize=8)
+                    ax_d.tick_params(labelsize=8)
                     st.pyplot(fig_d)
 
                 # Export and Integration
