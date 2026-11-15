@@ -945,6 +945,10 @@ def build_cli() -> argparse.ArgumentParser:
                         help="Minimum water patch in pixels to keep (removes noise specks, default: 4)")
     parser.add_argument('--max-hole', type=int, default=4,
                         help="Maximum enclosed land hole in pixels to fill (default: 4)")
+    parser.add_argument('--lake-boundary', action='store_true',
+                        help="Restrict classification to the checked-in Jakkur Lake ROI and preserve enclosed land islands.")
+    parser.add_argument('--boundary', type=str, default=None,
+                        help="Optional alternate Jakkur boundary JSON path.")
 
     # Outputs
     parser.add_argument('--output', '-o', type=str, default='processed_NDWI.tif',
@@ -982,7 +986,9 @@ def main():
             index_type=args.index,
             threshold_method=args.threshold_method,
             min_water_patch_pixels=args.min_patch,
-            max_hole_pixels=args.max_hole
+            max_hole_pixels=args.max_hole,
+            lake_boundary=args.lake_boundary,
+            boundary_path=args.boundary,
         )
     elif args.dir:
         print(f"[INFO] Scanning directory for spectral bands: {args.dir}")
@@ -997,7 +1003,9 @@ def main():
             reference_band=args.reference_band,
             threshold_method=args.threshold_method,
             min_water_patch_pixels=args.min_patch,
-            max_hole_pixels=args.max_hole
+            max_hole_pixels=args.max_hole,
+            lake_boundary=args.lake_boundary,
+            boundary_path=args.boundary,
         )
     else:
         band_paths = {}
