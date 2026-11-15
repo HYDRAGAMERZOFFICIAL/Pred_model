@@ -61,7 +61,9 @@ csv_path = resolve_dataset_csv(dataset_dir)
 
 # Standardized scientific cartographic palettes
 cmap_water_binary = ListedColormap(['#35A66B', '#2478C9'])
+cmap_water_binary.set_bad('#D9DEE7')
 cmap_depth_4class = ListedColormap(['#35A66B', '#F2C14E', '#2F81F7', '#0D419D'])
+cmap_depth_4class.set_bad('#D9DEE7')
 
 with st.sidebar.expander("Project setup and model readiness", expanded=False):
     csv_ready = os.path.isfile(csv_path)
@@ -175,10 +177,10 @@ if current_tif and os.path.exists(current_tif):
 
             st.markdown("### 5. Delineated Water Extent (Binary Mask)")
             fig_bin, ax_bin = plt.subplots(figsize=(6, 4.5))
-            ax_bin.imshow(binary_water, cmap=cmap_water_binary, vmin=0, vmax=1)
+            ax_bin.imshow(np.ma.array(binary_water, mask=~np.isfinite(arr)), cmap=cmap_water_binary, vmin=0, vmax=1)
             patches_bin = [
                 mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({total_valid - water_pixels:,} px)'),
-                mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Water ({water_pixels:,} px)'),
+                mpatches.Patch(facecolor='#2478C9', edgecolor='#185D9E', label=f'Water ({water_pixels:,} px)'),
             ]
             ax_bin.legend(handles=patches_bin, loc='lower right', framealpha=0.9, fontsize=8)
             ax_bin.set_title("Binary Water Extent")
@@ -187,7 +189,7 @@ if current_tif and os.path.exists(current_tif):
         with col2:
             st.markdown("### 3. Relative 3D Depth Map")
             fig3, ax3 = plt.subplots(figsize=(6, 4.5))
-            im3 = ax3.imshow(depth_map, cmap='jet', vmin=0, vmax=3)
+            im3 = ax3.imshow(np.ma.array(depth_map, mask=~np.isfinite(arr)), cmap=cmap_depth_4class, vmin=0, vmax=3)
             ax3.set_title("Depth Classes (0:Land, 1:Shallow, 2:Mod, 3:Deep)")
             fig3.colorbar(im3, ax=ax3, label='Depth Class')
             st.pyplot(fig3)
@@ -352,16 +354,16 @@ if current_tif and os.path.exists(current_tif):
 
                 # 2. Predicted Water Extent
                 pred_water_binary = (result["water_probability"] >= 0.5).astype(np.uint8)
-                axes[1].imshow(pred_water_binary, cmap=cmap_water_binary, vmin=0, vmax=1)
+                axes[1].imshow(np.ma.array(pred_water_binary, mask=~result['valid_mask']), cmap=cmap_water_binary, vmin=0, vmax=1)
                 patches_pred_binary = [
-                    mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label=f'Land ({result["valid_pixels"] - result["water_pixels"]:,} px)'),
+                    mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label=f'Land ({result["valid_pixels"] - result["water_pixels"]:,} px)'),
                     mpatches.Patch(facecolor='#0284c7', edgecolor='#0369a1', label=f'Predicted Water ({result["water_pixels"]:,} px)'),
                 ]
                 axes[1].legend(handles=patches_pred_binary, loc='lower right', framealpha=0.92, fontsize=7.5)
                 axes[1].set_title("2. Delineated Water Extent", fontsize=10, fontweight='bold', pad=8)
 
                 # 3. Predicted Relative Classes
-                axes[2].imshow(result["relative_classes"], cmap=cmap_depth_4class, vmin=0, vmax=3)
+                axes[2].imshow(np.ma.array(result["relative_classes"], mask=~result['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3)
                 patches_pred_classes = [
                     mpatches.Patch(facecolor='#35A66B', edgecolor='#238653', label='0: Land / Non-Water'),
                     mpatches.Patch(facecolor='#7dd3fc', edgecolor='#38bdf8', label='1: Shallow Water'),
@@ -749,7 +751,7 @@ if current_tif and os.path.exists(current_tif):
 
                     st.markdown("#### 4. Relative Spectral Classification (Proxy Ranks)")
                     fig_d, ax_d = plt.subplots(figsize=(6, 4.5), dpi=140)
-                    ax_d.imshow(res['depth_map'], cmap=cmap_depth_4class, vmin=0, vmax=3)
+                    ax_d.imshow(np.ma.array(res['depth_map'], mask=~res['valid_mask']), cmap=cmap_depth_4class, vmin=0, vmax=3)
                     ax_d.set_title("Relative Spectral Classes (Not Bathymetry)", fontsize=10, fontweight='bold', pad=8)
                     patches_d = [
                         mpatches.Patch(facecolor='#e2e8f0', edgecolor='#94a3b8', label='0: Land / Non-Water'),
