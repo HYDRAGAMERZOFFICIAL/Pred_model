@@ -226,6 +226,18 @@ def _synthesize_scene_from_prediction(water_probability, predicted_classes, ref_
     }
 
 
+def _load_keras_model(model_path):
+    """Load a Keras model lazily so geospatial-only workflows need not import TensorFlow."""
+    try:
+        import tensorflow as tf
+    except ImportError as exc:
+        raise ImportError(
+            "TensorFlow is required for CNN U-Net inference. Install the project dependencies "
+            "with `python -m pip install -r requirements.txt`."
+        ) from exc
+    return tf.keras.models.load_model(model_path, compile=False)
+
+
 def predict_lake_for_date(
     target_year,
     target_month,
@@ -300,8 +312,7 @@ def predict_lake_for_date(
             f"Historical observations begin at {min_ord // 3} {['JAN_APR', 'MAY_AUG', 'SEP_DEC'][min_ord % 3]}."
         )
 
-    import tensorflow as tf
-    model = tf.keras.models.load_model(model_path, compile=False)
+    model = _load_keras_model(model_path)
 
     ground_truth_scene = scene_by_ord.get(target_ordinal)
     ground_truth_available = ground_truth_scene is not None

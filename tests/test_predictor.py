@@ -151,7 +151,7 @@ class TestPredictorPixelArea(unittest.TestCase):
             mock_classes = np.ones((4, 4), dtype=np.uint8)
             mock_water = np.ones((4, 4), dtype=bool)
 
-            with patch("tensorflow.keras.models.load_model") as mock_load, \
+            with patch("src.predictor._load_keras_model") as mock_load, \
                  patch("src.predictor._run_model_inference_on_pair", return_value=(mock_prob, mock_class_prob, mock_classes, mock_water, mock_valid)):
                 result = predict_lake_for_date(
                     2023, "March", data_dir=tmp, model_dir=model_dir, output_dir=os.path.join(tmp, "out")

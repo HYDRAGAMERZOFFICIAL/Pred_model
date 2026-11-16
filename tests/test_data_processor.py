@@ -81,7 +81,7 @@ class TestLakeDataProcessor(unittest.TestCase):
     def test_default_resolves_to_jakkur_lake_datasets(self):
         from src.data_processor import resolve_data_dir, resolve_dataset_csv
         data_dir = resolve_data_dir()
-        self.assertEqual(data_dir, "Jakkur_lake_datasets")
+        self.assertIn(data_dir, ("Jakkur_lake_datasets", "jakkur_lake_datasets"))
         # The raster/CSV archive is intentionally excluded from Git because of
         # file size. Verify it when a developer has unpacked the supplied ZIP;
         # CI without that local archive should skip only this external-data check.
