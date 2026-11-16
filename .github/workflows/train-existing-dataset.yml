@@ -53,17 +53,47 @@ jobs:
           restore-keys: |
             ndwi-cnn-unet-kb-${{ runner.os }}-
 
-      - name: Select monthly Jakkur data when present
+      - name: Select available Jakkur NDWI data
         shell: bash
         run: |
-          if [ -d "training_data/ndwi_monthly" ] && [ -f "training_data/NDWI_pixel_depth_dataset.csv.gz" ]; then
-            echo "DATA_DIR=training_data/ndwi_monthly" >> "$GITHUB_ENV"
-            echo "DATASET_CSV=../NDWI_pixel_depth_dataset.csv.gz" >> "$GITHUB_ENV"
-            echo "OUTPUT_DIR=knowledge_base/jakkur_monthly" >> "$GITHUB_ENV"
+          set -euo pipefail
+
+          if [ -d "training_data/ndwi_monthly" ] && compgen -G "training_data/ndwi_monthly/NDWI_*.tif" > /dev/null; then
+            DATA_DIR="training_data/ndwi_monthly"
+            if [ -f "training_data/NDWI_pixel_depth_dataset.csv.gz" ]; then
+              DATASET_CSV="../NDWI_pixel_depth_dataset.csv.gz"
+            elif [ -f "training_data/NDWI_pixel_depth_dataset.csv" ]; then
+              DATASET_CSV="../NDWI_pixel_depth_dataset.csv"
+            else
+              DATASET_CSV="NDWI_pixel_depth_dataset.csv"
+            fi
+            OUTPUT_DIR="knowledge_base/jakkur_monthly"
+          elif [ -d "Jakkur_lake_datasets" ] && compgen -G "Jakkur_lake_datasets/NDWI_*.tif" > /dev/null; then
+            DATA_DIR="Jakkur_lake_datasets"
+            DATASET_CSV="NDWI_pixel_depth_dataset.csv"
+            OUTPUT_DIR="knowledge_base/jakkur"
+          elif [ -d "jakkur_lake_datasets" ] && compgen -G "jakkur_lake_datasets/NDWI_*.tif" > /dev/null; then
+            DATA_DIR="jakkur_lake_datasets"
+            DATASET_CSV="NDWI_pixel_depth_dataset.csv"
+            OUTPUT_DIR="knowledge_base/jakkur"
+          elif compgen -G "NDWI_*.tif" > /dev/null || compgen -G "NDWI_*.tiff" > /dev/null; then
+            DATA_DIR="."
+            DATASET_CSV="NDWI_pixel_depth_dataset.csv"
+            OUTPUT_DIR="knowledge_base"
           else
-            echo "DATA_DIR=." >> "$GITHUB_ENV"
-            echo "DATASET_CSV=NDWI_pixel_depth_dataset.csv" >> "$GITHUB_ENV"
-            echo "OUTPUT_DIR=knowledge_base" >> "$GITHUB_ENV"
+            echo "::error title=No NDWI GeoTIFF scenes::The checked-in Jakkur_lake_datasets folder contains QGIS projects and reports, not NDWI GeoTIFF scenes. Export aligned NDWI_*.tif scenes from QGIS and provide the matching pixel-label CSV before training."
+            exit 1
+          fi
+
+          if [ -f "$DATASET_CSV" ]; then
+            echo "DATA_DIR=$DATA_DIR" >> "$GITHUB_ENV"
+            echo "DATASET_CSV=$DATASET_CSV" >> "$GITHUB_ENV"
+            echo "OUTPUT_DIR=$OUTPUT_DIR" >> "$GITHUB_ENV"
+            echo "Selected NDWI data directory: $DATA_DIR"
+            echo "Selected label CSV: $DATASET_CSV"
+          else
+            echo "::error title=Missing pixel-label CSV::Expected '$DATASET_CSV'. Provide the generated pixel-depth label CSV before supervised CNN U-Net training."
+            exit 1
           fi
 
       - name: Compile project

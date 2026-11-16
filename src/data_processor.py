@@ -17,17 +17,32 @@ from skimage.filters import threshold_otsu
 DEFAULT_DATASET_DIR = "Jakkur_lake_datasets"
 
 
+def _contains_tiff(directory):
+    return os.path.isdir(directory) and any(
+        os.path.isfile(path)
+        for pattern in ("*.tif", "*.tiff", "*.TIF", "*.TIFF")
+        for path in glob.glob(os.path.join(directory, pattern))
+    )
+
+
 def resolve_data_dir(data_dir=None):
-    """Resolve the dataset directory, prioritizing Jakkur_lake_datasets."""
-    if data_dir and data_dir != ".":
-        if os.path.isdir(data_dir):
-            return data_dir
-    for candidate in ["Jakkur_lake_datasets", "jakkur_lake_datasets", "dataset", "."]:
-        if os.path.isdir(candidate):
-            tifs = glob.glob(os.path.join(candidate, "*.tif")) + glob.glob(os.path.join(candidate, "*.tiff"))
-            if tifs:
-                return candidate
-    return data_dir or DEFAULT_DATASET_DIR
+    """Resolve a supplied data directory or the conventional Jakkur dataset folder."""
+    if data_dir:
+        if not os.path.isdir(data_dir):
+            raise FileNotFoundError(f"Dataset directory does not exist: {data_dir}")
+        return data_dir
+
+    for candidate in (DEFAULT_DATASET_DIR, "jakkur_lake_datasets", "dataset", "."):
+        if _contains_tiff(candidate):
+            return candidate
+
+    # Keep the documented default path even when it currently contains only
+    # QGIS projects/reports; callers can then issue a precise missing-raster error.
+    if os.path.isdir(DEFAULT_DATASET_DIR):
+        return DEFAULT_DATASET_DIR
+    if os.path.isdir("jakkur_lake_datasets"):
+        return "jakkur_lake_datasets"
+    return DEFAULT_DATASET_DIR
 
 
 def resolve_dataset_csv(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv"):
@@ -54,7 +69,7 @@ class LakeDataProcessor:
     def __init__(self, data_dir=None):
         self.data_dir = resolve_data_dir(data_dir)
         self.tif_files = sorted(
-            p for p in (glob.glob(os.path.join(self.data_dir, "*.tif")) + glob.glob(os.path.join(self.data_dir, "*.tiff")))
+            p for p in (glob.glob(os.path.join(self.data_dir, "*.tif")) + glob.glob(os.path.join(self.data_dir, "*.tiff")) + glob.glob(os.path.join(self.data_dir, "*.TIF")) + glob.glob(os.path.join(self.data_dir, "*.TIFF")))
             if os.path.isfile(p) and not os.path.basename(p).startswith(".")
         )
 
