@@ -11,6 +11,7 @@ A complete, tested reference of all execution commands for **Windows Terminal (P
 | **Activate Virtual Env** | `.\.venv\Scripts\Activate.ps1` | `source .venv/bin/activate` |
 | **Run All Unit Tests** | `python -m unittest discover -s tests -v` | `python3 -m unittest discover -s tests -v` |
 | **Audit Dataset Files** | `python -m src.dataset_audit` | `python3 -m src.dataset_audit` |
+| **Build Pixel CSV Dataset** | `python -m scripts.build_full_dataset` | `python3 -m scripts.build_full_dataset` |
 | **Ingest / Sync Archive** | `python -m src.knowledge_base` | `python3 -m src.knowledge_base` |
 | **Fast Model Training** | `python -m src.trainer --mode full --patch-size 64 --stride 32 --epochs 50` | `python3 -m src.trainer --mode full --patch-size 64 --stride 32 --epochs 50` |
 | **Gate-Passing Dense Training** | `python -m src.trainer --mode full --patch-size 64 --stride 16 --epochs 50` | `python3 -m src.trainer --mode full --patch-size 64 --stride 16 --epochs 50` |
@@ -55,7 +56,7 @@ pip install -r requirements.txt
 ### B. Verification & Quality Assurance
 
 ```powershell
-# Run the complete test suite (all 32 unit and integration tests)
+# Run the complete test suite (all 47 unit and integration tests)
 python -m unittest discover -s tests -v
 
 # Run dataset audit on Jakkur_lake_datasets/
@@ -150,7 +151,7 @@ pip install -r requirements.txt
 ### B. Verification & Quality Assurance
 
 ```bash
-# Run the complete test suite (all 32 unit and integration tests)
+# Run the complete test suite (all 47 unit and integration tests)
 python3 -m unittest discover -s tests -v
 
 # Run dataset audit on Jakkur_lake_datasets/
