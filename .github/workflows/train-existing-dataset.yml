@@ -14,6 +14,8 @@ on:
       - "NDWI_*.tif"
       - "NDWI_*.tiff"
       - "NDWI_pixel_depth_dataset.csv"
+      - "training_data/ndwi_monthly/**"
+      - "training_data/NDWI_pixel_depth_dataset.csv.gz"
       - "spectral_data/**"
       - "training/TRIGGER_CNN_UNET_TRAINING.txt"
 
@@ -51,6 +53,19 @@ jobs:
           restore-keys: |
             ndwi-cnn-unet-kb-${{ runner.os }}-
 
+      - name: Select monthly Jakkur data when present
+        shell: bash
+        run: |
+          if [ -d "training_data/ndwi_monthly" ] && [ -f "training_data/NDWI_pixel_depth_dataset.csv.gz" ]; then
+            echo "DATA_DIR=training_data/ndwi_monthly" >> "$GITHUB_ENV"
+            echo "DATASET_CSV=../NDWI_pixel_depth_dataset.csv.gz" >> "$GITHUB_ENV"
+            echo "OUTPUT_DIR=knowledge_base/jakkur_monthly" >> "$GITHUB_ENV"
+          else
+            echo "DATA_DIR=." >> "$GITHUB_ENV"
+            echo "DATASET_CSV=NDWI_pixel_depth_dataset.csv" >> "$GITHUB_ENV"
+            echo "OUTPUT_DIR=knowledge_base" >> "$GITHUB_ENV"
+          fi
+
       - name: Compile project
         run: python -m compileall -q app.py src tests
 
@@ -63,9 +78,9 @@ jobs:
         run: |
           if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
-            python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --spectral-dir "$SPECTRAL_DIR" --output dataset_audit_report.json
+            python -m src.dataset_audit --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --spectral-dir "$SPECTRAL_DIR" --output dataset_audit_report.json
           else
-            python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
+            python -m src.dataset_audit --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --output dataset_audit_report.json
           fi
 
       - name: Build append-only knowledge base from the committed dataset
@@ -74,9 +89,9 @@ jobs:
         run: |
           if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
-            python -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --archive-dir knowledge_base --spectral-dir "$SPECTRAL_DIR"
+            python -m src.knowledge_base --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --archive-dir "$OUTPUT_DIR" --spectral-dir "$SPECTRAL_DIR"
           else
-            python -m src.knowledge_base --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --archive-dir knowledge_base
+            python -m src.knowledge_base --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --archive-dir "$OUTPUT_DIR"
           fi
 
       - name: Train temporal CNN U-Net from CSV-supervised scenes
@@ -85,9 +100,9 @@ jobs:
         run: |
           if [ -z "$SPECTRAL_DIR" ] && [ -d "spectral_data" ]; then SPECTRAL_DIR="spectral_data"; fi
           if [ -n "$SPECTRAL_DIR" ]; then
-            python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output-dir knowledge_base --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01 --spectral-dir "$SPECTRAL_DIR" --skip-ingest
+            python -m src.trainer --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --output-dir "$OUTPUT_DIR" --mode both --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01 --spectral-dir "$SPECTRAL_DIR" --skip-ingest
           else
-            python -m src.trainer --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output-dir knowledge_base --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01 --skip-ingest
+            python -m src.trainer --data-dir "$DATA_DIR" --dataset-csv "$DATASET_CSV" --output-dir "$OUTPUT_DIR" --mode full --patch-size 64 --stride 32 --epochs 50 --batch-size 8 --validation-sequences 2 --min-valid-fraction 0.01 --skip-ingest
           fi
 
       - name: Record source revision and dataset counts
@@ -98,8 +113,11 @@ jobs:
           import pandas as pd
           import rasterio
           from pathlib import Path
-          scenes = sorted(Path(".").glob("NDWI_*.tif"))
-          labels = pd.read_csv("NDWI_pixel_depth_dataset.csv")
+          data_dir = Path(os.environ.get("DATA_DIR", "."))
+          csv_path = os.environ.get("DATASET_CSV", "NDWI_pixel_depth_dataset.csv")
+          output_dir = Path(os.environ.get("OUTPUT_DIR", "knowledge_base"))
+          scenes = sorted(data_dir.glob("NDWI_*.tif"))
+          labels = pd.read_csv(data_dir / csv_path)
           metadata = {
               "git_commit": os.environ["GITHUB_SHA"],
               "source_scene_count": len(scenes),
@@ -110,7 +128,8 @@ jobs:
               "training_report": "knowledge_base/runs/<run-id>/full_retrain/training_report.json",
               "run_summary": "knowledge_base/runs/<run-id>/run_summary.json",
           }
-          with open("knowledge_base/dataset_build_summary.json", "w") as f:
+          output_dir.mkdir(parents=True, exist_ok=True)
+          with open(output_dir / "dataset_build_summary.json", "w") as f:
               json.dump(metadata, f, indent=2)
           print(json.dumps(metadata, indent=2))
           PY

@@ -1,0 +1,65 @@
+{
+  "source_bundle_files": 247,
+  "geotiff_files": 100,
+  "auxiliary_xml_files": 101,
+  "qgis_projects": 41,
+  "word_documents": 5,
+  "raster_types": {
+    "three_band_source": 29,
+    "monthly_ndwi": 29,
+    "binary_water_masks": 29,
+    "seasonal_ndwi_unlabelled": 11,
+    "trial_outputs": 2
+  },
+  "grid": {
+    "width": 97,
+    "height": 162,
+    "crs": "EPSG:4326",
+    "valid_pixels_per_monthly_scene": 7991,
+    "total_pixels": 15714,
+    "valid_coverage_percent": 50.852743
+  },
+  "monthly_scenes": 29,
+  "seasonal_unlabelled_scenes": 11,
+  "pixel_rows_monthly_labelled": 231739,
+  "pixel_rows_all_observations": 319640,
+  "three_scene_monthly_targets": 16,
+  "training_target_windows": 14,
+  "validation_targets": [
+    "2026_03",
+    "2026_04"
+  ],
+  "validation_persistence_baseline": {
+    "water_macro_f1": 0.9683567017084234,
+    "relative_class_macro_f1": 0.5876949070970271
+  },
+  "water_mask_ndwi_threshold_separable_scenes": 29,
+  "water_mask_threshold_agreement_percent": 100,
+  "ndwi_formula": "(B3 - B8) / (B3 + B8)",
+  "ndwi_formula_mean_absolute_error": 0,
+  "qgis_layer_source_status": {
+    "resolves_in_archive": 86,
+    "basename_match_relinkable": 18,
+    "absolute_path_relinkable_by_unique_basename": 10,
+    "temporary_processing_output_not_in_archive": 44,
+    "absolute_external_path_missing": 28,
+    "missing_source": 6
+  },
+  "document_paragraphs": 43,
+  "embedded_document_images": 59,
+  "document_threshold_comparison_rows": 7,
+  "document_threshold_discrepancy_rows": 3,
+  "document_threshold_notes": [
+    "JAKKUR25.docx reports Jan 2025 NDWI=-0.24; mask-derived threshold is approximately -0.19992.",
+    "JAKKUR25.docx reports Feb 2025 NDWI=+0.3; mask-derived threshold is approximately -0.29996 (sign discrepancy).",
+    "jAKKUR_24.docx reports NDWI=-0.34 near May 2024; mask-derived threshold is approximately -0.29996.",
+    "JAKKUR_26.docx reports -0.2 for Jan-Apr 2026; values agree with mask-derived thresholds to rounding."
+  ],
+  "limitations": [
+    "Water masks are NDWI-threshold-dependent, not independent ground truth.",
+    "Relative NDWI classes are not physical depth.",
+    "No bathymetry or measured depth was supplied.",
+    "Seasonal composites have no matching masks and remain unlabeled.",
+    "Three-band source data does not satisfy the current 4/5-band multispectral stack contract."
+  ]
+}

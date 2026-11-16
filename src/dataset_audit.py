@@ -28,6 +28,7 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
         "scene_count": len(raster_paths),
         "scenes": [],
         "missing_seasonal_periods": [],
+        "missing_months": [],
         "consecutive_training_windows": [],
         "label_sources": [],
         "errors": [],
@@ -38,7 +39,8 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
         return report
 
     reference_grid = None
-    ordinals = []
+    seasonal_ordinals = []
+    monthly_ordinals = []
     for path in raster_paths:
         try:
             with rasterio.open(path) as src:
@@ -61,7 +63,9 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
                     )
                 year, period, _ = temporal_sort_key(path)
                 if year != 9999 and period in SEASON_ORDER.values():
-                    ordinals.append(year * 3 + period - 1)
+                    seasonal_ordinals.append(year * 3 + period - 1)
+                elif year != 9999 and 101 <= period <= 112:
+                    monthly_ordinals.append(year * 12 + (period - 101))
                 report["scenes"].append({
                     "filename": os.path.basename(path),
                     "width": int(src.width),
@@ -78,13 +82,19 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
         except Exception as exc:
             report["errors"].append(f"Cannot read {os.path.basename(path)}: {exc}")
 
-    if ordinals:
-        present = set(ordinals)
+    if seasonal_ordinals:
+        present = set(seasonal_ordinals)
         for ordinal in range(min(present), max(present) + 1):
             if ordinal not in present:
                 year, season_index = divmod(ordinal, 3)
                 season = next(name for name, index in SEASON_ORDER.items() if index == season_index + 1)
                 report["missing_seasonal_periods"].append(f"{season}_{str(year)[-2:]}")
+    if monthly_ordinals:
+        present = set(monthly_ordinals)
+        for ordinal in range(min(present), max(present) + 1):
+            if ordinal not in present:
+                year, month_index = divmod(ordinal, 12)
+                report["missing_months"].append(f"{year}-{month_index + 1:02d}")
 
     if os.path.isfile(csv_path):
         try:
@@ -131,6 +141,11 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
         report["warnings"].append(
             "Missing seasonal scenes interrupt temporal windows: "
             + ", ".join(report["missing_seasonal_periods"])
+        )
+    if report["missing_months"]:
+        report["warnings"].append(
+            "Missing monthly observations interrupt monthly temporal windows: "
+            + ", ".join(report["missing_months"])
         )
     if len(raster_paths) < 3:
         report["warnings"].append("At least three scenes are required for temporal learning.")
