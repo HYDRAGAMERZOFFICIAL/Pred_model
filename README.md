@@ -218,3 +218,8 @@ The active-model comparison is then performed on the same validation holdout.
 A candidate that trains successfully but fails this gate remains versioned for
 inspection and is not promoted for prediction. The predictor refuses to serve
 an active model whose report does not record a passed quality gate.
+
+
+## Jakkur Lake monthly dataset
+
+The ZIP-derived data audit, monthly temporal training support, label limitations and QGIS source-path findings are documented in [docs/JAKKUR_DATASET_AUDIT.md](docs/JAKKUR_DATASET_AUDIT.md). The data dictionary and training instructions are in [data/jakkur/](data/jakkur/). The monthly model now recognises consecutive calendar-month sequences and explicitly skips missing months.

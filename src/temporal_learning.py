@@ -15,48 +15,61 @@ import rasterio
 from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 SEASON_ORDER = {"JAN_APR": 1, "MAY_AUG": 2, "SEP_DEC": 3}
+MONTH_ORDER = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
 
 
 def temporal_sort_key(path):
+    """Sort seasonal composites or monthly scenes chronologically."""
     name = os.path.basename(path).upper()
     year_match = re.search(r"(?:20\d{2}|(?<=_)\d{2})(?=[_.-]|$)", name)
     year = int(year_match.group()) if year_match else 9999
     if year < 100:
         year += 2000
-    period = next((rank for token, rank in SEASON_ORDER.items() if token in name), 99)
-    return year, period, name
+    season = next((rank for token, rank in SEASON_ORDER.items() if token in name), None)
+    if season is not None:
+        return year, season, name
+    month_match = re.search(r"(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[_-]*(?:20\d{2}|\d{2})(?=[_.-]|$)", name)
+    if month_match:
+        return year, 100 + MONTH_ORDER[month_match.group(1)], name
+    return year, 999, name
 
 
 def discover_ndwi_rasters(data_dir=None):
+    """Discover dated NDWI inputs, excluding water masks and trial exports."""
     data_dir = resolve_data_dir(data_dir)
     if not os.path.isdir(data_dir):
         return []
-    paths = [
-        os.path.join(data_dir, name)
-        for name in os.listdir(data_dir)
-        if name.lower().endswith((".tif", ".tiff"))
-        and re.search(r"(?:20\d{2}|(?<=_)\d{2})(?=[_.-]|$)", name)
-        and any(token in name.upper() for token in SEASON_ORDER)
-    ]
+    paths = []
+    for name in os.listdir(data_dir):
+        upper = name.upper()
+        if not name.lower().endswith((".tif", ".tiff")):
+            continue
+        if not upper.startswith("NDWI_") or "WATER" in upper or "TRIAL" in upper:
+            continue
+        year, period, _ = temporal_sort_key(name)
+        if year != 9999 and (period in SEASON_ORDER.values() or 101 <= period <= 112):
+            paths.append(os.path.join(data_dir, name))
     return sorted(paths, key=temporal_sort_key)
 
 
-
 def consecutive_target_indices(scenes):
-    """Keep only three-scene windows with regular four-month spacing."""
-    ordinals = []
-    for scene in scenes:
-        year, period, _ = temporal_sort_key(scene["name"])
-        if year == 9999 or period not in (1, 2, 3):
-            continue
-        ordinals.append(year * 3 + period - 1)
-    if len(ordinals) != len(scenes):
+    """Return targets with two immediately preceding monthly or seasonal scenes."""
+    keys = [temporal_sort_key(scene["name"]) for scene in scenes]
+    if not keys or any(year == 9999 for year, _, _ in keys):
+        return []
+    periods = [period for _, period, _ in keys]
+    if all(101 <= period <= 112 for period in periods):
+        ordinals = [year * 12 + (period - 101) for year, period, _ in keys]
+    elif all(period in SEASON_ORDER.values() for period in periods):
+        ordinals = [year * 3 + period - 1 for year, period, _ in keys]
+    else:
         return []
     return [
         index for index in range(2, len(scenes))
         if ordinals[index - 1] - ordinals[index - 2] == 1
         and ordinals[index] - ordinals[index - 1] == 1
     ]
+
 
 def _labels_from_csv(frame, shape, raster_valid):
     required = {"row", "column", "water", "depth_class"}
@@ -301,8 +314,8 @@ def prepare_temporal_training_data(
     target_indices = consecutive_target_indices(scenes)
     if len(target_indices) < validation_sequences + 1:
         raise ValueError(
-            f"Need at least {validation_sequences + 1} consecutive three-scene windows; "
-            f"found {len(target_indices)}. Add missing seasonal NDWI scenes or reduce "
+            f"Need at least {validation_sequences + 1} regularly spaced three-scene windows; "
+            f"found {len(target_indices)}. Check missing monthly/seasonal observations or reduce "
             "the validation sequence count."
         )
     val_targets = target_indices[-validation_sequences:]

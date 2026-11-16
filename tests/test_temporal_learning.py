@@ -6,7 +6,7 @@ import pandas as pd
 import rasterio
 from rasterio.transform import from_origin
 
-from src.temporal_learning import temporal_sort_key, consecutive_target_indices, load_temporal_scenes, prepare_temporal_training_data, build_temporal_input, _labels_from_csv
+from src.temporal_learning import temporal_sort_key, consecutive_target_indices, discover_ndwi_rasters, load_temporal_scenes, prepare_temporal_training_data, build_temporal_input, _labels_from_csv
 
 
 class TestTemporalLearning(unittest.TestCase):
@@ -72,6 +72,37 @@ class TestTemporalLearning(unittest.TestCase):
         self.assertTrue(np.allclose(features[..., 3], 0.5))
         legacy = build_temporal_input(first, second, legacy=True)
         self.assertEqual(legacy.shape, (2, 2, 4))
+
+
+    def test_monthly_sort(self):
+        names = ["NDWI_JAKKUR_OCT_22.tif", "NDWI_JAKKUR_JAN_23.tif", "NDWI_JAKKUR_DEC_22.tif", "NDWI_JAKKUR_FEB_23.tif"]
+        self.assertEqual(sorted(names, key=temporal_sort_key), [
+            "NDWI_JAKKUR_OCT_22.tif", "NDWI_JAKKUR_DEC_22.tif",
+            "NDWI_JAKKUR_JAN_23.tif", "NDWI_JAKKUR_FEB_23.tif"
+        ])
+
+    def test_monthly_windows_skip_missing_months(self):
+        scenes = [
+            {"name": "NDWI_JAKKUR_JAN_22.tif"},
+            {"name": "NDWI_JAKKUR_FEB_22.tif"},
+            {"name": "NDWI_JAKKUR_MAR_22.tif"},
+            {"name": "NDWI_JAKKUR_APR_22.tif"},
+            {"name": "NDWI_JAKKUR_JUN_22.tif"},
+            {"name": "NDWI_JAKKUR_JUL_22.tif"},
+            {"name": "NDWI_JAKKUR_AUG_22.tif"},
+        ]
+        self.assertEqual(consecutive_target_indices(scenes), [2, 3, 6])
+
+    def test_monthly_discovery_excludes_masks_and_trial_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in [
+                "NDWI_JAKKUR_JAN_22.tif", "NDWI_JAKKUR_FEB_22.tif",
+                "NDWIWATER_JAKKUR_JAN_22.tif", "NDWI_JAKKUR_TRIAL.tif"
+            ]:
+                self.write_scene(os.path.join(tmp, name), np.full((4, 4), 0.2, dtype=np.float32))
+            self.assertEqual([os.path.basename(p) for p in discover_ndwi_rasters(tmp)], [
+                "NDWI_JAKKUR_JAN_22.tif", "NDWI_JAKKUR_FEB_22.tif"
+            ])
 
     def test_seasonal_sort(self):
         names = ["NDWI_SEP_DEC_22.tif", "NDWI_JAN_APR_23.tif", "NDWI_MAY_AUG_22.tif"]

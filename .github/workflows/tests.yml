@@ -18,15 +18,17 @@ jobs:
       - name: Install geospatial test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy pandas matplotlib rasterio pyproj scikit-image scipy
+          python -m pip install numpy pandas matplotlib rasterio pyproj scikit-image scipy "tensorflow>=2.15"
       - name: Compile Python modules
         run: python -m compileall -q app.py src tests
       - name: Audit local NDWI scenes and pixel labels when supplied
         run: |
-          if [ -d "Jakkur_lake_datasets" ] || compgen -G "NDWI_*.tif" > /dev/null || compgen -G "NDWI_*.tiff" > /dev/null; then
+          if [ -d "training_data/ndwi_monthly" ] && compgen -G "training_data/ndwi_monthly/NDWI_*.tif" > /dev/null; then
+            python -m src.dataset_audit --data-dir training_data/ndwi_monthly --dataset-csv ../NDWI_pixel_depth_dataset.csv.gz --output dataset_audit_report.json
+          elif compgen -G "NDWI_*.tif" > /dev/null || compgen -G "NDWI_*.tiff" > /dev/null; then
             python -m src.dataset_audit --data-dir . --dataset-csv NDWI_pixel_depth_dataset.csv --output dataset_audit_report.json
           else
-            echo "No local NDWI dataset is committed; dataset audit is covered by synthetic unit tests."
+            echo "No NDWI GeoTIFF inputs are present in the repository; dataset audit is covered by synthetic unit tests."
           fi
       - name: Run geospatial and temporal unit tests
         run: |

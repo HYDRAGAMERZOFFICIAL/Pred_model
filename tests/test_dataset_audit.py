@@ -27,6 +27,21 @@ class TestDatasetAudit(unittest.TestCase):
             self.assertEqual(report["scenes"][0]["valid_pixels"], 14)
             self.assertEqual(report["scenes"][0]["masked_or_nonfinite_pixels"], 2)
 
+
+    def test_audit_reports_missing_months(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ["NDWI_JAKKUR_JAN_22.tif", "NDWI_JAKKUR_FEB_22.tif", "NDWI_JAKKUR_APR_22.tif"]:
+                path = os.path.join(tmp, name)
+                with rasterio.open(
+                    path, "w", driver="GTiff", height=4, width=4, count=1,
+                    dtype="float32", crs="EPSG:32643",
+                    transform=from_origin(500000, 1500000, 10, 10), nodata=-9999,
+                ) as dst:
+                    dst.write(np.full((4, 4), 0.2, dtype=np.float32), 1)
+            report = audit_dataset(tmp, "labels.csv")
+            self.assertIn("2022-03", report["missing_months"])
+            self.assertEqual(report["scene_count"], 3)
+
     def test_audit_reports_missing_seasonal_period(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name in ["NDWI_JAN_APR_22.tif", "NDWI_SEP_DEC_22.tif", "NDWI_JAN_APR_23.tif"]:
