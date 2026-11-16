@@ -274,6 +274,14 @@ def active_model_path(archive_dir="knowledge_base"):
         return json.load(stream).get("model_path")
 
 
+def active_report_path(archive_dir="knowledge_base"):
+    path = Path(archive_dir) / "active_model.json"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as stream:
+        return json.load(stream).get("report_path")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Append NDWI scenes to the permanent knowledgebase archive.")
     parser.add_argument("--data-dir", default=None, help="Directory containing NDWI GeoTIFFs (defaults to Jakkur_lake_datasets)")

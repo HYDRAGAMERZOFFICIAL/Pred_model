@@ -15,6 +15,7 @@ from src.temporal_learning import (
     discover_ndwi_rasters,
     load_temporal_scenes,
     temporal_sort_key,
+    _grids_match,
 )
 
 
@@ -57,7 +58,7 @@ def audit_dataset(data_dir=None, dataset_csv="NDWI_pixel_depth_dataset.csv", spe
                 grid = (src.height, src.width, src.transform, src.crs)
                 if reference_grid is None:
                     reference_grid = grid
-                elif grid != reference_grid:
+                elif not _grids_match(grid, reference_grid):
                     report["errors"].append(
                         f"{os.path.basename(path)} does not match the first scene's raster grid."
                     )

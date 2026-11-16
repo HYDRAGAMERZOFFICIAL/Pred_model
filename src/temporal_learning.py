@@ -15,7 +15,38 @@ import rasterio
 from src.data_processor import LakeDataProcessor, resolve_data_dir
 
 SEASON_ORDER = {"JAN_APR": 1, "MAY_AUG": 2, "SEP_DEC": 3}
-MONTH_ORDER = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+MONTH_ORDER = {
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+}
+
+
+class TemporalKey(tuple):
+    """3-tuple (year, period, name) with cadence-aware ordering and backward compatibility."""
+    def __new__(cls, year, period, name, cadence_rank=0):
+        obj = super().__new__(cls, (year, period, name))
+        obj.cadence_rank = cadence_rank
+        return obj
+
+    def __lt__(self, other):
+        if hasattr(other, "cadence_rank"):
+            return (self.cadence_rank, self[0], self[1], self[2]) < (other.cadence_rank, other[0], other[1], other[2])
+        return super().__lt__(other)
+
+    def __le__(self, other):
+        if hasattr(other, "cadence_rank"):
+            return (self.cadence_rank, self[0], self[1], self[2]) <= (other.cadence_rank, other[0], other[1], other[2])
+        return super().__le__(other)
+
+    def __gt__(self, other):
+        if hasattr(other, "cadence_rank"):
+            return (self.cadence_rank, self[0], self[1], self[2]) > (other.cadence_rank, other[0], other[1], other[2])
+        return super().__gt__(other)
+
+    def __ge__(self, other):
+        if hasattr(other, "cadence_rank"):
+            return (self.cadence_rank, self[0], self[1], self[2]) >= (other.cadence_rank, other[0], other[1], other[2])
+        return super().__ge__(other)
 
 
 def temporal_sort_key(path):
@@ -27,14 +58,14 @@ def temporal_sort_key(path):
         year += 2000
     season = next((rank for token, rank in SEASON_ORDER.items() if token in name), None)
     if season is not None:
-        return year, season, name
+        return TemporalKey(year, season, os.path.basename(path), cadence_rank=0)
     month_match = re.search(r"(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[_-]*(?:20\d{2}|\d{2})(?=[_.-]|$)", name)
     if month_match:
-        return year, 100 + MONTH_ORDER[month_match.group(1)], name
-    return year, 999, name
+        return TemporalKey(year, 100 + MONTH_ORDER[month_match.group(1)], os.path.basename(path), cadence_rank=1)
+    return TemporalKey(year, 999, os.path.basename(path), cadence_rank=2)
 
 
-def discover_ndwi_rasters(data_dir=None):
+def discover_ndwi_rasters(data_dir=None, cadence="all"):
     """Discover dated NDWI inputs, excluding water masks and trial exports."""
     data_dir = resolve_data_dir(data_dir)
     if not os.path.isdir(data_dir):
@@ -46,29 +77,45 @@ def discover_ndwi_rasters(data_dir=None):
             continue
         if not upper.startswith("NDWI_") or "WATER" in upper or "TRIAL" in upper:
             continue
-        year, period, _ = temporal_sort_key(name)
-        if year != 9999 and (period in SEASON_ORDER.values() or 101 <= period <= 112):
-            paths.append(os.path.join(data_dir, name))
+        # Deduplicate unversioned copy if JAN-tagged scene exists
+        if upper == "NDWI_JAKKUR_26.TIF" and os.path.exists(os.path.join(data_dir, "NDWI_JAKKUR_JAN_26.tif")):
+            continue
+        key = temporal_sort_key(name)
+        year, period, _ = key
+        rank = getattr(key, "cadence_rank", 0)
+        is_seasonal = (rank == 0 and period in SEASON_ORDER.values())
+        is_monthly = (rank == 1 and 101 <= period <= 112)
+        if not (is_seasonal or is_monthly):
+            continue
+        if cadence == "seasonal" and not is_seasonal:
+            continue
+        if cadence == "monthly" and not is_monthly:
+            continue
+        paths.append(os.path.join(data_dir, name))
     return sorted(paths, key=temporal_sort_key)
 
 
 def consecutive_target_indices(scenes):
     """Return targets with two immediately preceding monthly or seasonal scenes."""
-    keys = [temporal_sort_key(scene["name"]) for scene in scenes]
-    if not keys or any(year == 9999 for year, _, _ in keys):
-        return []
-    periods = [period for _, period, _ in keys]
-    if all(101 <= period <= 112 for period in periods):
-        ordinals = [year * 12 + (period - 101) for year, period, _ in keys]
-    elif all(period in SEASON_ORDER.values() for period in periods):
-        ordinals = [year * 3 + period - 1 for year, period, _ in keys]
-    else:
-        return []
-    return [
-        index for index in range(2, len(scenes))
-        if ordinals[index - 1] - ordinals[index - 2] == 1
-        and ordinals[index] - ordinals[index - 1] == 1
-    ]
+    keys = [temporal_sort_key(scene["name"] if isinstance(scene, dict) else scene) for scene in scenes]
+    ordinals = []
+    for key in keys:
+        year, period, _ = key
+        rank = getattr(key, "cadence_rank", 0)
+        if rank == 1 and 101 <= period <= 112:
+            ordinals.append((1, year * 12 + (period - 101)))
+        elif rank == 0 and period in SEASON_ORDER.values():
+            ordinals.append((0, year * 3 + period - 1))
+        else:
+            ordinals.append((-1, -9999))
+    targets = []
+    for index in range(2, len(scenes)):
+        c0, o0 = ordinals[index - 2]
+        c1, o1 = ordinals[index - 1]
+        c2, o2 = ordinals[index]
+        if c0 != -1 and c0 == c1 == c2 and o1 - o0 == 1 and o2 - o1 == 1:
+            targets.append(index)
+    return targets
 
 
 def _labels_from_csv(frame, shape, raster_valid):
@@ -127,13 +174,24 @@ def _spectral_stack_path(spectral_dir, scene_name):
     return None
 
 
+def _grids_match(grid1, grid2, atol=1e-5):
+    """Check grid compatibility allowing minor floating-point rounding in affine transforms."""
+    if grid1 is None or grid2 is None:
+        return grid1 is grid2
+    h1, w1, t1, c1 = grid1
+    h2, w2, t2, c2 = grid2
+    if (h1, w1) != (h2, w2) or str(c1) != str(c2):
+        return False
+    return np.allclose(list(t1), list(t2), atol=atol)
+
+
 def _load_spectral_stack(path, reference_grid, reflectance_scale=10000.0):
-    """Read a co-registered 4- or 5-band surface-reflectance stack."""
+    """Read a co-registered 3-, 4- or 5-band surface-reflectance stack."""
     with rasterio.open(path) as src:
-        if src.count not in (4, 5):
-            raise ValueError(f"{path} must contain 4 (Blue, Green, Red, NIR) or 5 (plus SWIR1) bands.")
+        if src.count not in (3, 4, 5):
+            raise ValueError(f"{path} must contain 3 (NIR, Red, Green), 4 (Blue, Green, Red, NIR) or 5 (plus SWIR1) bands.")
         grid = (src.height, src.width, src.transform, src.crs)
-        if grid != reference_grid:
+        if not _grids_match(grid, reference_grid):
             raise ValueError(f"Multispectral stack {path} is not aligned to its NDWI scene. Resample all bands to the exact NDWI grid before training.")
         raw = src.read().astype(np.float32)
         masks = src.read_masks().astype(bool)
@@ -183,7 +241,7 @@ def load_temporal_scenes(
             grid = (src.height, src.width, src.transform, src.crs)
             if reference is None:
                 reference = grid
-            elif grid != reference:
+            elif not _grids_match(grid, reference):
                 raise ValueError(
                     f"Raster grid mismatch in {os.path.basename(path)}. "
                     "Reproject/resample all QGIS NDWI exports to the same grid before temporal training."

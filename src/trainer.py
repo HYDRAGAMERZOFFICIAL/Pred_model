@@ -20,7 +20,7 @@ from src.temporal_learning import discover_ndwi_rasters, prepare_temporal_traini
 from src.model_validation import deployment_eligibility
 from src.knowledge_base import (
     ingest_scenes, archived_raster_paths, archived_spectral_dir, build_training_label_csv,
-    register_model_version, promote_model_version, active_model_path,
+    register_model_version, promote_model_version, active_model_path, active_report_path,
 )
 
 
@@ -184,12 +184,15 @@ def _train_candidate(
 
     checkpoint_path = os.path.join(output_dir, "best.keras")
     hooks = [
-        tf.keras.callbacks.ModelCheckpoint(checkpoint_path, monitor="val_loss", save_best_only=True, verbose=1),
+        tf.keras.callbacks.ModelCheckpoint(
+            checkpoint_path, monitor="val_water_probability_masked_water_iou", mode="max", save_best_only=True, verbose=1
+        ),
     ]
     if early_stopping_patience and early_stopping_patience > 0:
         hooks.append(
             tf.keras.callbacks.EarlyStopping(
-                monitor="val_loss",
+                monitor="val_water_probability_masked_water_iou",
+                mode="max",
                 patience=early_stopping_patience,
                 restore_best_weights=True,
                 verbose=1,
@@ -198,7 +201,8 @@ def _train_candidate(
         lr_patience = max(6, early_stopping_patience // 2)
         hooks.append(
             tf.keras.callbacks.ReduceLROnPlateau(
-                monitor="val_loss",
+                monitor="val_water_probability_masked_water_iou",
+                mode="max",
                 factor=0.5,
                 patience=lr_patience,
                 min_lr=1e-7,
@@ -208,7 +212,8 @@ def _train_candidate(
     else:
         hooks.append(
             tf.keras.callbacks.ReduceLROnPlateau(
-                monitor="val_loss",
+                monitor="val_water_probability_masked_water_iou",
+                mode="max",
                 factor=0.5,
                 patience=8,
                 min_lr=1e-7,
@@ -467,10 +472,20 @@ def train_and_save_model(
         except Exception as exc:
             print(f"WARNING: Existing active model could not be evaluated on this holdout; promotion is disabled: {exc}")
 
+    previous_eligible = False
+    prev_report_file = active_report_path(output_dir)
+    if prev_report_file and os.path.isfile(prev_report_file):
+        try:
+            with open(prev_report_file, encoding="utf-8") as stream:
+                previous_eligible = bool(json.load(stream).get("deployment_eligible", False))
+        except Exception:
+            pass
+
     promoted = (
         promotion_candidate is not None
         and (
             not (previous_model and os.path.isfile(previous_model))
+            or not previous_eligible
             or active_schema_compatible is False
             or (
                 active_schema_compatible is True
