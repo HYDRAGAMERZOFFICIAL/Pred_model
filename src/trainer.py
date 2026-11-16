@@ -265,8 +265,9 @@ def _train_candidate(
 
     # Evaluate full-scene mosaics against a simple persistence baseline. This
     # catches models that train successfully but forecast worse than "no change".
+    eval_stride = min(stride, 16)
     scene_metrics = _evaluate_scene_forecasts(
-        model, scenes, data_report["target_scenes_validation"], patch_size, stride
+        model, scenes, data_report["target_scenes_validation"], patch_size, eval_stride
     )
     water_cm = scene_metrics["water_confusion_matrix"]
     water_metrics = scene_metrics["water_metrics"]
@@ -340,7 +341,7 @@ def train_and_save_model(
     patch_size=64, stride=32, epochs=50, batch_size=8, validation_sequences=2,
     learning_rate=1e-4, seed=42, mode="both", ingest=True, min_valid_fraction=0.01,
     augment=True, spectral_dir=None, reflectance_scale=10000.0,
-    early_stopping_patience=20,
+    early_stopping_patience=20, validation_targets=None, initial_model=None,
 ):
     """Ingest first, then run full and/or fine-tune candidates on all archived scenes."""
     data_dir = resolve_data_dir(data_dir)
@@ -377,7 +378,7 @@ def train_and_save_model(
     x_train, y_train, x_val, y_val, scenes, data_report = prepare_temporal_training_data(
         raster_paths, csv_path, patch_size, stride, validation_sequences,
         min_valid_fraction, training_spectral_dir, reflectance_scale,
-        lake_boundary=False,
+        lake_boundary=False, validation_targets=validation_targets,
     )
     data_report["archive_scene_count"] = len(raster_paths)
     data_report["archive_manifest"] = os.path.join(output_dir, "archive", "manifest.json")
@@ -389,7 +390,7 @@ def train_and_save_model(
     previous_model = active_model_path(output_dir)
     candidates = []
     if mode in ("both", "full"):
-        candidates.append(("full_retrain", None))
+        candidates.append(("full_retrain", initial_model))
     if mode in ("both", "incremental"):
         if previous_model and os.path.isfile(previous_model):
             existing = tf.keras.models.load_model(previous_model, compile=False)
@@ -547,6 +548,10 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=["both", "full", "incremental"], default="both")
     parser.add_argument("--early-stopping-patience", type=int, default=20,
                         help="Number of epochs without validation loss improvement before stopping early (default: 20; pass 0 to disable early stopping).")
+    parser.add_argument("--validation-targets", nargs="+", default=None,
+                        help="Explicit target scene name(s) for validation holdout (e.g. NDWI_JAKKUR_MAR_26.tif). Defaults to the last N sequence targets.")
+    parser.add_argument("--initial-model", default=None,
+                        help="Path to an existing Keras model file to initialize candidate weights.")
     parser.add_argument("--skip-ingest", action="store_true")
     args = parser.parse_args()
     values = vars(args)

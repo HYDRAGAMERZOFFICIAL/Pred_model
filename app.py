@@ -108,15 +108,29 @@ def map_month_to_season(m):
         return "SEP_DEC", "Sep - Dec (Post-Monsoon)"
 
 def get_base_raster_for_selection(year_str, month_str):
-    code, _ = map_month_to_season(month_str)
     yr = str(year_str)[-2:]
-    matches = [f for f in tif_files if code in os.path.basename(f) and yr in os.path.basename(f)]
-    if matches:
-        return matches[0]
-    season_matches = [f for f in tif_files if code in os.path.basename(f)]
+    m_abbr = month_str[:3].upper()
+    code, _ = map_month_to_season(month_str)
+    ndwi_files = [
+        f for f in tif_files 
+        if os.path.basename(f).startswith("NDWI_") and not os.path.basename(f).startswith("NDWIWATER_")
+    ]
+    monthly_matches = [
+        f for f in ndwi_files 
+        if f"_{m_abbr}_{yr}." in os.path.basename(f) or f"_{m_abbr}_{yr}_" in os.path.basename(f)
+    ]
+    if monthly_matches:
+        return monthly_matches[0]
+    seasonal_matches = [
+        f for f in ndwi_files 
+        if code in os.path.basename(f) and yr in os.path.basename(f)
+    ]
+    if seasonal_matches:
+        return seasonal_matches[0]
+    season_matches = [f for f in ndwi_files if code in os.path.basename(f)]
     if season_matches:
         return season_matches[0]
-    return tif_files[0] if tif_files else None
+    return ndwi_files[0] if ndwi_files else (tif_files[0] if tif_files else None)
 
 # Sidebar Controls for Map Selection
 st.sidebar.header("Scene explorer")

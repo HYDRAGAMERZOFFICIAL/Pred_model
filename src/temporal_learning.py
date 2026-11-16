@@ -366,18 +366,35 @@ def prepare_temporal_training_data(
     raster_paths, dataset_csv=None, patch_size=64, stride=32,
     validation_sequences=2, min_valid_fraction=0.01, spectral_dir=None,
     reflectance_scale=10000.0, lake_boundary=False, boundary_path=None,
+    validation_targets=None,
 ):
     """Chronologically split target scenes before patch extraction."""
     scenes = load_temporal_scenes(raster_paths, dataset_csv, spectral_dir, reflectance_scale, lake_boundary, boundary_path)
     target_indices = consecutive_target_indices(scenes)
-    if len(target_indices) < validation_sequences + 1:
-        raise ValueError(
-            f"Need at least {validation_sequences + 1} regularly spaced three-scene windows; "
-            f"found {len(target_indices)}. Check missing monthly/seasonal observations or reduce "
-            "the validation sequence count."
-        )
-    val_targets = target_indices[-validation_sequences:]
-    train_targets = target_indices[:-validation_sequences]
+    if validation_targets:
+        val_targets = []
+        for name in validation_targets:
+            target_scene_name = os.path.basename(name)
+            matched_idx = None
+            for idx in target_indices:
+                s_name = scenes[idx]["name"]
+                if s_name == target_scene_name or s_name.endswith("_" + target_scene_name) or s_name.endswith(target_scene_name):
+                    matched_idx = idx
+                    break
+            if matched_idx is not None:
+                val_targets.append(matched_idx)
+            else:
+                raise ValueError(f"Explicit validation target '{name}' is not an available 3-scene sequence target.")
+        train_targets = [idx for idx in target_indices if idx not in val_targets]
+    else:
+        if len(target_indices) < validation_sequences + 1:
+            raise ValueError(
+                f"Need at least {validation_sequences + 1} regularly spaced three-scene windows; "
+                f"found {len(target_indices)}. Check missing monthly/seasonal observations or reduce "
+                "the validation sequence count."
+            )
+        val_targets = target_indices[-validation_sequences:]
+        train_targets = target_indices[:-validation_sequences]
     skipped_targets = [
         scenes[index]["name"] for index in range(2, len(scenes))
         if index not in target_indices

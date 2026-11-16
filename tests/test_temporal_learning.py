@@ -228,6 +228,14 @@ class TestTemporalLearning(unittest.TestCase):
             self.assertGreater(len(x_val), 0)
             self.assertEqual(meta["validation_sequences"], 1)
 
+            # Test explicit validation_targets
+            val_target_name = os.path.basename(paths[-1])
+            x_t2, _, x_v2, _, _, meta2 = prepare_temporal_training_data(
+                paths, csv_path, patch_size=8, stride=8, validation_targets=[val_target_name]
+            )
+            self.assertEqual(meta2["target_scenes_validation"], [val_target_name])
+            self.assertEqual(len(x_v2), len(x_val))
+
 
 if __name__ == "__main__":
     unittest.main()
