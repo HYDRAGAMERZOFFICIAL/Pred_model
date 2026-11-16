@@ -295,21 +295,66 @@ def predict_lake_for_date(
 
     target_year = int(target_year)
     period_code, period_idx, season_name = map_month_to_season_code(target_month)
-    target_ordinal = target_year * 3 + period_idx
 
-    scene_by_ord = {}
+    month_names_list = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    month_code_map = {
+        "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+        "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+    }
+    target_month_num = None
+    if isinstance(target_month, int) and 1 <= target_month <= 12:
+        target_month_num = target_month
+    elif isinstance(target_month, str):
+        tok = target_month.strip().upper()[:3]
+        target_month_num = month_code_map.get(tok)
+
+    monthly_by_ord = {}
+    seasonal_by_ord = {}
     for s in scenes:
-        y, p, _ = temporal_sort_key(s["name"])
-        ord_val = y * 3 + (p - 1)
-        scene_by_ord[ord_val] = s
+        key = temporal_sort_key(s["name"])
+        rank = getattr(key, "cadence_rank", 0)
+        y, p, _ = key
+        if rank == 1 and 101 <= p <= 112:
+            monthly_by_ord[y * 12 + (p - 101)] = s
+        elif rank == 0 and p in (1, 2, 3):
+            seasonal_by_ord[y * 3 + (p - 1)] = s
+
+    use_monthly = False
+    if monthly_by_ord and target_month_num is not None:
+        target_ordinal = target_year * 12 + (target_month_num - 1)
+        known_monthly = sorted(monthly_by_ord.keys())
+        min_ord, max_ord = known_monthly[0], known_monthly[-1]
+        predecessors = [o for o in known_monthly if o < target_ordinal]
+        if len(predecessors) >= 2 or target_ordinal >= min_ord + 2:
+            use_monthly = True
+            scene_by_ord = monthly_by_ord
+            display_period = f"{month_names_list[target_month_num - 1]} {target_year}"
+            step_unit = "monthly"
+
+    if not use_monthly:
+        target_ordinal = target_year * 3 + period_idx
+        scene_by_ord = seasonal_by_ord if seasonal_by_ord else {
+            y * 3 + (p - 1): s for s in scenes
+            for y, p, _ in [temporal_sort_key(s["name"])]
+            if p in (1, 2, 3)
+        }
+        known_seasonal = sorted(scene_by_ord.keys())
+        if not known_seasonal:
+            scene_by_ord = {i: s for i, s in enumerate(scenes)}
+            known_seasonal = list(scene_by_ord.keys())
+        min_ord, max_ord = known_seasonal[0], known_seasonal[-1]
+        display_period = f"{season_name} {target_year}"
+        step_unit = "seasonal"
 
     known_ords = sorted(scene_by_ord.keys())
-    min_ord, max_ord = known_ords[0], known_ords[-1]
 
     if target_ordinal < min_ord + 2:
         raise ValueError(
-            f"Prediction for {season_name} {target_year} requires at least two preceding seasonal baselines. "
-            f"Historical observations begin at {min_ord // 3} {['JAN_APR', 'MAY_AUG', 'SEP_DEC'][min_ord % 3]}."
+            f"Prediction for {display_period} requires at least two preceding {step_unit} baselines. "
+            f"Historical observations begin at {scenes[0]['name']}."
         )
 
     model = _load_keras_model(model_path)
@@ -327,7 +372,7 @@ def predict_lake_for_date(
     if target_ordinal <= max_ord:
         predecessors = [o for o in known_ords if o < target_ordinal]
         if len(predecessors) < 2:
-            raise ValueError(f"Insufficient historical baselines before {target_year} {period_code}.")
+            raise ValueError(f"Insufficient historical baselines before {display_period}.")
         first = scene_by_ord[predecessors[-2]]
         second = scene_by_ord[predecessors[-1]]
         input_scenes_used = [first["name"], second["name"]]
@@ -341,30 +386,54 @@ def predict_lake_for_date(
         curr_first = scene_by_ord[known_ords[-2]]
         curr_second = scene_by_ord[known_ords[-1]]
         curr_ord = max_ord
-        period_codes = ["JAN_APR", "MAY_AUG", "SEP_DEC"]
 
-        while curr_ord < target_ordinal:
-            next_ord = curr_ord + 1
-            next_y = next_ord // 3
-            next_p_idx = next_ord % 3
-            next_code = period_codes[next_p_idx]
+        if use_monthly:
+            while curr_ord < target_ordinal:
+                next_ord = curr_ord + 1
+                next_y = next_ord // 12
+                next_m_idx = next_ord % 12
+                next_code = month_names_list[next_m_idx][:3].upper()
 
-            prob, class_prob, classes, water, valid_output = _run_model_inference_on_pair(
-                model, curr_first, curr_second, patch_size, legacy_schema
-            )
-            input_scenes_used = [curr_first["name"], curr_second["name"]]
-            ref_scene = curr_second
-
-            if next_ord == target_ordinal:
-                water_probability, predicted_classes, predicted_water = prob, classes, water
-                break
-            else:
-                syn_scene = _synthesize_scene_from_prediction(
-                    prob, classes, curr_second, next_code, next_y
+                prob, class_prob, classes, water, valid_output = _run_model_inference_on_pair(
+                    model, curr_first, curr_second, patch_size, legacy_schema
                 )
-                curr_first = curr_second
-                curr_second = syn_scene
-                curr_ord = next_ord
+                input_scenes_used = [curr_first["name"], curr_second["name"]]
+                ref_scene = curr_second
+
+                if next_ord == target_ordinal:
+                    water_probability, predicted_classes, predicted_water = prob, classes, water
+                    break
+                else:
+                    syn_scene = _synthesize_scene_from_prediction(
+                        prob, classes, curr_second, next_code, next_y
+                    )
+                    curr_first = curr_second
+                    curr_second = syn_scene
+                    curr_ord = next_ord
+        else:
+            period_codes = ["JAN_APR", "MAY_AUG", "SEP_DEC"]
+            while curr_ord < target_ordinal:
+                next_ord = curr_ord + 1
+                next_y = next_ord // 3
+                next_p_idx = next_ord % 3
+                next_code = period_codes[next_p_idx]
+
+                prob, class_prob, classes, water, valid_output = _run_model_inference_on_pair(
+                    model, curr_first, curr_second, patch_size, legacy_schema
+                )
+                input_scenes_used = [curr_first["name"], curr_second["name"]]
+                ref_scene = curr_second
+
+                if next_ord == target_ordinal:
+                    water_probability, predicted_classes, predicted_water = prob, classes, water
+                    break
+                else:
+                    syn_scene = _synthesize_scene_from_prediction(
+                        prob, classes, curr_second, next_code, next_y
+                    )
+                    curr_first = curr_second
+                    curr_second = syn_scene
+                    curr_ord = next_ord
 
     if ground_truth_available:
         gt_water = (ground_truth_scene["water"] == 1) & valid_output
@@ -417,7 +486,7 @@ def predict_lake_for_date(
         "season_name": season_name,
         "steps_ahead": steps_ahead,
         "input_scenes": input_scenes_used,
-        "predicted_for": f"{season_name} {target_year}",
+        "predicted_for": display_period,
         "model_validation_status": "validated" if deployment_eligible else "experimental_unvalidated",
         "model_source": model_source,
         "water_probability_path": probability_path,
